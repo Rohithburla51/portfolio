@@ -45,7 +45,11 @@ export function CertificateModal({ cert, trigger }: CertificateModalProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+            // NOTE: backdrop-blur intentionally omitted here.
+            // backdrop-filter re-runs on every child repaint (hover transitions,
+            // shadow changes) which causes a visible 1-frame flicker on Windows
+            // Chromium. The bg-black/85 alone provides enough visual depth.
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4"
             role="dialog"
             aria-modal="true"
             aria-label={cert.name}
@@ -56,6 +60,7 @@ export function CertificateModal({ cert, trigger }: CertificateModalProps) {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               onClick={(e) => e.stopPropagation()}
               className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-[#0f172a] shadow-2xl"
+              style={{ isolation: "isolate" }}
             >
               <div className="flex items-start justify-between border-b border-white/10 px-6 py-4">
                 <div>
@@ -227,7 +232,7 @@ function ImageViewer({
               setScale(1);
             }}
             onWheel={handleWheel}
-            className="fixed inset-0 z-[110] flex cursor-zoom-out items-center justify-center bg-black/95 backdrop-blur-md"
+            className="fixed inset-0 z-[110] flex cursor-zoom-out items-center justify-center bg-black/95"
             role="dialog"
             aria-modal="true"
             aria-label={`${alt} — fullscreen zoom`}
