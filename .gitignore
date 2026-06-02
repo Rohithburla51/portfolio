@@ -30,8 +30,19 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# dev/prod logs
+/dev.log
+/prod.log
+/*.log
+
 # env files (can opt-in for committing if needed)
-.env*
+.env
+.env.local
+.env.*.local
+
+# but allow example files
+!.env.example
+!.env*.example
 
 # vercel
 .vercel
@@ -39,3 +50,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# screenshots / preview artifacts (large binary blobs)
+/.preview/
+
+# puppeteer user-data
+/edge-userdata/
