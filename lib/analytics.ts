@@ -30,6 +30,7 @@ export type EventName =
   | "cert_view"
   | "cert_download"
   | "cert_verify"
+  | "cert_pdf_open"
   | "project_readme_open"
   | "project_github"
   | "project_demo"
