@@ -73,6 +73,24 @@ export interface Experience {
   created_at: string;
 }
 
+export interface Profile {
+  id: string;
+  name: string;
+  title: string;
+  about_me: string;
+  email: string;
+  github_url: string | null;
+  linkedin_url: string | null;
+  resume_url: string | null;
+  profile_image_url: string | null;
+  location: string | null;
+  phone: string | null;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Post {
   id: string;
   slug: string;

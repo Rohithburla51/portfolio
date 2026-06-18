@@ -3,7 +3,6 @@ import { About } from "@/components/sections/about";
 import { Skills } from "@/components/sections/skills";
 import { CodingProfiles } from "@/components/sections/coding-profiles";
 import { GithubProjects } from "@/components/sections/github-projects";
-import { FeaturedProjects } from "@/components/sections/featured-projects";
 import { Experience } from "@/components/sections/experience";
 import { Certifications } from "@/components/sections/certifications";
 import { Achievements } from "@/components/sections/achievements";
@@ -20,7 +19,6 @@ export default function HomePage() {
       <About />
       <Skills />
       <CodingProfiles />
-      <FeaturedProjects />
       <GithubProjects />
       <Experience />
       <Achievements />

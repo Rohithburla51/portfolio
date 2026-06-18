@@ -16,7 +16,30 @@ import type {
   Experience,
   FeaturedProject,
   Post,
+  Profile,
 } from "@/lib/types";
+
+/* ------------------------------- Profile --------------------------- */
+export const getProfile = cache(
+  async (): Promise<Profile | null> => {
+    try {
+      const supabase = createPublicSupabase();
+      if (!supabase) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("is_active", true)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as Profile | null;
+    } catch (e) {
+      console.error("[data] getProfile failed:", e);
+      return null;
+    }
+  },
+  ["profile"],
+  { revalidate: 600, tags: ["profile"] },
+);
 
 /* --------------------------- Certificates -------------------------- */
 export const getCertificates = cache(

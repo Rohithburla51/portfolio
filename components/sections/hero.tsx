@@ -6,9 +6,8 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ArrowDown, Download, Mail, Github, Linkedin, Sparkles } from "lucide-react";
 import { AnimatedMesh } from "@/components/motion/animated-mesh";
 import { TypingAnimation } from "@/components/motion/typing-animation";
-import { GradientButton } from "@/components/ui/gradient-button";
 import { GlassCard } from "@/components/ui/glass-card";
-import { SITE, trackEvent } from "@/lib/utils";
+import { trackEvent, SITE } from "@/lib/utils";
 
 const TYPING_WORDS = [
   "Machine Learning",
@@ -18,9 +17,51 @@ const TYPING_WORDS = [
   "Software Development",
 ];
 
+interface ProfileData {
+  name: string;
+  title: string;
+  about_me: string;
+  email: string;
+  github_url: string | null;
+  linkedin_url: string | null;
+  resume_url: string | null;
+  profile_image_url: string | null;
+  location: string | null;
+}
+
 export function Hero() {
   const reduce = useReducedMotion();
   const [resumeUrl, setResumeUrl] = React.useState<string | null>(null);
+  const [profile, setProfile] = React.useState<ProfileData | null>(null);
+
+  React.useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch("/api/admin/profile");
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            setProfile(data);
+            if (data.resume_url) {
+              setResumeUrl(data.resume_url);
+            }
+          }
+        }
+      } catch {
+        // Fall back to SITE constants
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  const displayName = profile?.name || "Burla";
+  const displayLastName = profile?.name ? profile.name.split(" ").slice(1).join(" ") || "Rohith" : "Rohith";
+  const displayTitle = profile?.title || SITE.shortRole;
+  const displayLocation = profile?.location || SITE.location;
+  const displayBio = profile?.about_me || "B.Tech CSE (AI & ML) '27 @ CMR College of Engineering and Technology. Focused on building AI-powered products that bridge research and real-world deployment.";
+  const displayGithub = profile?.github_url || SITE.socials.github;
+  const displayLinkedin = profile?.linkedin_url || SITE.socials.linkedin;
+  const displayProfileImage = profile?.profile_image_url || "/profile.jpg";
 
   return (
     <section
@@ -54,9 +95,9 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.1 }}
             className="font-display text-[clamp(3rem,8vw,6rem)] font-bold leading-[0.95] tracking-tight"
           >
-            Burla
+            {displayName.split(" ")[0]}
             <br />
-            <span className="text-gradient">Rohith</span>
+            <span className="text-gradient">{displayLastName}</span>
           </motion.h1>
 
           <motion.div
@@ -66,7 +107,7 @@ export function Hero() {
             className="mt-6 flex flex-col gap-2"
           >
             <p className="text-lg font-medium text-white md:text-xl">
-              {SITE.shortRole}
+              {displayTitle}
             </p>
             <p className="font-mono text-sm text-[var(--color-text-muted)] md:text-base">
               <span className="text-[var(--color-text-muted)]">I build with </span>
@@ -77,15 +118,13 @@ export function Hero() {
             </p>
           </motion.div>
 
-          <motion.p
+<motion.p
             initial={reduce ? false : { opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
             className="mt-6 max-w-xl text-base leading-relaxed text-[var(--color-text-muted)] md:text-lg"
           >
-            B.Tech CSE (AI &amp; ML) &lsquo;27 @ CMR College of Engineering and
-            Technology. Focused on building AI-powered products that bridge
-            research and real-world deployment.
+            {displayBio}
           </motion.p>
 
           {/* CTAs */}
@@ -111,7 +150,7 @@ export function Hero() {
               Contact Me
             </a>
             <a
-              href={SITE.socials.github}
+              href={displayGithub}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => trackEvent("github_click", { source: "hero" })}
@@ -121,7 +160,7 @@ export function Hero() {
               <Github className="h-5 w-5" />
             </a>
             <a
-              href={SITE.socials.linkedin}
+              href={displayLinkedin}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => trackEvent("linkedin_click", { source: "hero" })}
@@ -184,8 +223,8 @@ export function Hero() {
             <GlassCard className="relative overflow-hidden rounded-3xl p-0">
               <div className="relative aspect-[4/5] w-full overflow-hidden">
                 <Image
-                  src="/profile.jpg"
-                  alt={`${SITE.name} — portrait`}
+                  src={displayProfileImage}
+                  alt={`${displayName} — portrait`}
                   fill
                   priority
                   sizes="(max-width: 768px) 100vw, 400px"
@@ -209,10 +248,10 @@ export function Hero() {
               <div className="relative -mt-12 flex items-end gap-3 p-5">
                 <div className="flex-1">
                   <p className="font-display text-xl font-semibold tracking-tight">
-                    {SITE.name}
+                    {displayName}
                   </p>
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    {SITE.location}
+                    {displayLocation}
                   </p>
                 </div>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-emerald-300">

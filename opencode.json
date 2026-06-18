@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "minimax": {
+      "npm": "@ai-sdk/anthropic",
+      "options": {
+        "baseURL": "https://nvidia.com"
+      },
+      "models": {
+        "MiniMax-M3": {
+          "name": "minimaxai/minimax-m3"
+        }
+      }
+    }
+  }
+}

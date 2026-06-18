@@ -6,14 +6,15 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/utils";
+import { createBrowserClient } from "@supabase/ssr";
 
-const NAV_LINKS = [
+const BASE_NAV_LINKS = [
   { href: "#about", label: "About" },
   { href: "#skills", label: "Skills" },
   { href: "#projects", label: "Projects" },
   { href: "#experience", label: "Experience" },
   { href: "#achievements", label: "Achievements" },
-  { href: "#blog", label: "Blog" },
+  { href: "#blog", label: "Blog", requiresPost: true },
   { href: "#contact", label: "Contact" },
 ];
 
@@ -22,6 +23,28 @@ export function Navbar() {
   const [scrolled, setScrolled] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [active, setActive] = React.useState<string>("");
+  const [navLinks, setNavLinks] = React.useState(BASE_NAV_LINKS.filter(l => !l.requiresPost));
+
+  React.useEffect(() => {
+    const checkBlogPosts = async () => {
+      try {
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+        const { count } = await supabase
+          .from("posts")
+          .select("*", { count: "exact", head: true })
+          .eq("is_published", true);
+        if (count && count > 0) {
+          setNavLinks(BASE_NAV_LINKS);
+        }
+      } catch {
+        // Keep blog link hidden if fetch fails
+      }
+    };
+    checkBlogPosts();
+  }, []);
 
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -41,12 +64,12 @@ export function Navbar() {
       },
       { rootMargin: "-50% 0px -50% 0px" },
     );
-    NAV_LINKS.forEach((l) => {
+    navLinks.forEach((l) => {
       const el = document.getElementById(l.href.replace("#", ""));
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, []);
+  }, [navLinks]);
 
   return (
     <motion.header
@@ -81,7 +104,7 @@ export function Navbar() {
 
         {/* Desktop nav */}
         <ul className="hidden items-center gap-1 md:flex">
-          {NAV_LINKS.map((l) => (
+          {navLinks.map((l) => (
             <li key={l.href}>
               <a
                 href={l.href}
@@ -144,7 +167,7 @@ export function Navbar() {
             className="overflow-hidden border-t border-white/[0.06] bg-[rgba(15,23,42,0.9)] backdrop-blur-xl md:hidden"
           >
             <ul className="space-y-1 px-4 py-4">
-              {NAV_LINKS.map((l) => (
+              {navLinks.map((l) => (
                 <li key={l.href}>
                   <a
                     href={l.href}

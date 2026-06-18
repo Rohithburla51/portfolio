@@ -4,8 +4,11 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { GlassCard } from "@/components/ui/glass-card";
 import { TrackableLink } from "@/components/ui/trackable-link";
 import { CertificateModal } from "@/components/sections/certificate-modal";
+import { SeeMoreGrid } from "@/components/ui/see-more-grid";
 import { getCertificates } from "@/lib/data";
 import { formatDate } from "@/lib/utils";
+
+const VISIBLE_COUNT = 6;
 
 export async function Certifications() {
   const certs = await getCertificates();
@@ -29,9 +32,11 @@ export async function Certifications() {
         />
 
         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {certs.map((cert) => (
-            <CertificateCard key={cert.id} cert={cert} />
-          ))}
+          <SeeMoreGrid visibleCount={VISIBLE_COUNT}>
+            {certs.map((cert) => (
+              <CertificateCard key={cert.id} cert={cert} />
+            ))}
+          </SeeMoreGrid>
         </div>
       </div>
     </section>
