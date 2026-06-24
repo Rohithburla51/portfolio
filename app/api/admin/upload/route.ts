@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file type
-    const allowedBuckets = ["certificates", "profile_images", "blog_covers", "featured_media", "achievements"];
+    const allowedBuckets = ["resumes", "certificates", "profile_images", "blog_covers", "featured_media", "achievements"];
     if (!allowedBuckets.includes(bucket)) {
       return NextResponse.json({ error: "Invalid bucket" }, { status: 400 });
     }

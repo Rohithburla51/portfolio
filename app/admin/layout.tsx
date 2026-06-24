@@ -6,6 +6,7 @@ import {
   Award,
   Trophy,
   FileText,
+  FileUp,
   MessageCircle,
   LogOut,
   ChevronRight,
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/admin/projects", label: "Projects", icon: FolderOpen },
   { href: "/admin/certificates", label: "Certificates", icon: Award },
   { href: "/admin/achievements", label: "Achievements", icon: Trophy },
+  { href: "/admin/resume", label: "Resume", icon: FileUp },
   { href: "/admin/posts", label: "Blog Posts", icon: FileText },
   { href: "/admin/chatbot", label: "Chatbot", icon: MessageCircle },
 ];
