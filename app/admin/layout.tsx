@@ -1,7 +1,4 @@
-import { redirect } from "next/navigation";
-import { createServerClient } from "@supabase/ssr";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import {
   LayoutDashboard,
   User,
@@ -9,12 +6,10 @@ import {
   Award,
   Trophy,
   FileText,
+  MessageCircle,
   LogOut,
   ChevronRight,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-const ALLOWED_EMAIL = "burlarohith999@gmail.com".toLowerCase();
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -23,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/admin/certificates", label: "Certificates", icon: Award },
   { href: "/admin/achievements", label: "Achievements", icon: Trophy },
   { href: "/admin/posts", label: "Blog Posts", icon: FileText },
+  { href: "/admin/chatbot", label: "Chatbot", icon: MessageCircle },
 ];
 
 export const metadata = {
@@ -38,56 +34,6 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    redirect("/admin/login?error=configuration");
-  }
-
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll() {},
-    },
-  });
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    // No user session found.
-    //
-    // IMPORTANT: We do NOT redirect here because the proxy.ts already
-    // handles auth protection for admin routes. The proxy bypasses
-    // /admin/login, /admin/unauthorized, and /admin/auth/callback.
-    //
-    // If we redirect here, we'd create a loop:
-    // - User visits /admin/login (bypassed by proxy)
-    // - Layout finds no user → redirect to /admin/login (SAME URL)
-    // - Infinite loop!
-    //
-    // Instead, we simply render the children. The login page will
-    // show itself (it's a client component that handles its own UI).
-    // For protected pages, the proxy already redirected them to login.
-    return (
-      <div className="min-h-screen bg-[#0f172a]">
-        {children}
-      </div>
-    );
-  }
-
-  const userEmail = user.email?.toLowerCase().trim();
-  if (userEmail !== ALLOWED_EMAIL) {
-    // User is logged in but wrong email - redirect to unauthorized
-    // This will be handled by the proxy redirect, or render unauthorized page
-    redirect("/admin/unauthorized");
-  }
-
   return (
     <div className="flex min-h-screen bg-[#0f172a]">
       {/* Sidebar */}
@@ -99,8 +45,8 @@ export default async function AdminLayout({
           </div>
           <div>
             <p className="text-sm font-semibold text-white">Admin Panel</p>
-            <p className="text-xs text-[var(--color-text-muted)] truncate max-w-[140px]">
-              {user.email}
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Burla Rohith
             </p>
           </div>
         </div>

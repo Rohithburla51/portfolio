@@ -1,20 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { createBrowserClient } from "@supabase/ssr";
 import { cn } from "@/lib/utils";
-import { Loader2, Mail, Shield, AlertCircle } from "lucide-react";
-
-const ALLOWED_EMAIL = "burlarohith999@gmail.com";
+import { Loader2, Lock, Shield, AlertCircle } from "lucide-react";
 
 export default function AdminLoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string; redirect?: string }>;
 }) {
-  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
-  const [sent, setSent] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const params = React.use(searchParams);
@@ -24,43 +20,33 @@ export default function AdminLoginPage({
     if (params.error === "configuration") {
       setError("Server configuration error. Please try again.");
     }
+    if (params.error === "unauthorized") {
+      setError("Access denied. Invalid credentials.");
+    }
   }, [params.error]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    const normalizedEmail = email.toLowerCase().trim();
-    if (normalizedEmail !== ALLOWED_EMAIL) {
-      setError("Unauthorized: This email is not allowed to access the admin panel.");
-      return;
-    }
-
     setLoading(true);
 
     try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
-
-      const { error: signInError } = await supabase.auth.signInWithOtp({
-        email: normalizedEmail,
-        options: {
-          emailRedirectTo: `${window.location.origin}/admin/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
-        },
+      const res = await fetch("/api/admin/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
       });
 
-      if (signInError) {
-        setError(signInError.message);
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Invalid password");
         setLoading(false);
         return;
       }
 
-      setSent(true);
-    } catch (err) {
+      window.location.href = redirectTo;
+    } catch {
       setError("An unexpected error occurred. Please try again.");
-    } finally {
       setLoading(false);
     }
   };
@@ -80,99 +66,76 @@ export default function AdminLoginPage({
           </div>
           <h1 className="font-display text-3xl font-bold text-white">Admin Access</h1>
           <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-            Sign in to manage your portfolio
+            Enter the admin password to continue
           </p>
         </div>
 
         {/* Card */}
         <div className="rounded-2xl border border-white/[0.08] bg-[rgba(255,255,255,0.03)] p-8 backdrop-blur-xl">
-          {sent ? (
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
-                <Mail className="h-6 w-6 text-green-400" />
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/10 p-4">
+                <AlertCircle className="h-5 w-5 shrink-0 text-red-400 mt-0.5" />
+                <p className="text-sm text-red-300">{error}</p>
               </div>
-              <h2 className="text-lg font-semibold text-white">Check your email</h2>
-              <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-                We sent a magic link to <span className="text-white">{email}</span>.
-                Click the link to sign in.
-              </p>
-              <button
-                onClick={() => {
-                  setSent(false);
-                  setEmail("");
-                }}
-                className="mt-6 text-sm text-[#6366f1] hover:text-[#818cf8] transition-colors"
+            )}
+
+            <div className="space-y-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-white/80"
               >
-                Use a different email
-              </button>
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                  required
+                  autoFocus
+                  className={cn(
+                    "w-full rounded-lg border border-white/[0.08] bg-white/[0.04]",
+                    "pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-[var(--color-text-muted)]",
+                    "focus:border-[#6366f1] focus:outline-none focus:ring-1 focus:ring-[#6366f1]/50",
+                    "transition-colors"
+                  )}
+                />
+              </div>
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/10 p-4">
-                  <AlertCircle className="h-5 w-5 shrink-0 text-red-400 mt-0.5" />
-                  <p className="text-sm text-red-300">{error}</p>
-                </div>
+
+            <button
+              type="submit"
+              disabled={loading || !password}
+              className={cn(
+                "w-full rounded-lg bg-gradient-to-r from-[#6366f1] via-[#8b5cf6] to-[#06b6d4]",
+                "py-2.5 text-sm font-medium text-white",
+                "transition-all hover:shadow-[0_0_30px_rgba(99,102,241,0.4)]",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+                "flex items-center justify-center gap-2"
               )}
-
-              <div className="space-y-2">
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-white/80"
-                >
-                  Email address
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--color-text-muted)]" />
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    required
-                    className={cn(
-                      "w-full rounded-lg border border-white/[0.08] bg-white/[0.04]",
-                      "pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-[var(--color-text-muted)]",
-                      "focus:border-[#6366f1] focus:outline-none focus:ring-1 focus:ring-[#6366f1]/50",
-                      "transition-colors"
-                    )}
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className={cn(
-                  "w-full rounded-lg bg-gradient-to-r from-[#6366f1] via-[#8b5cf6] to-[#06b6d4]",
-                  "py-2.5 text-sm font-medium text-white",
-                  "transition-all hover:shadow-[0_0_30px_rgba(99,102,241,0.4)]",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
-                  "flex items-center justify-center gap-2"
-                )}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Sending magic link...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="h-4 w-4" />
-                    Send magic link
-                  </>
-                )}
-              </button>
-            </form>
-          )}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                <>
+                  <Shield className="h-4 w-4" />
+                  Sign In
+                </>
+              )}
+            </button>
+          </form>
         </div>
 
         {/* Footer */}
         <p className="mt-6 text-center text-xs text-[var(--color-text-muted)]">
-          Only <span className="text-white/60">{ALLOWED_EMAIL}</span> is authorized.
-          <br />
-          This panel is hidden from search engines.
+          This panel is protected and hidden from search engines.
         </p>
       </div>
     </div>

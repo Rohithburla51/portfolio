@@ -13,6 +13,7 @@ import { createPublicSupabase } from "@/lib/supabase";
 import type {
   Achievement,
   Certificate,
+  ChatbotSettings,
   Experience,
   FeaturedProject,
   Post,
@@ -195,3 +196,44 @@ export async function getSiteConfig<T = Record<string, unknown>>(
     return null;
   }
 }
+
+/* -------------------------- Chatbot settings ----------------------- */
+export const getChatbotSettings = cache(
+  async (): Promise<ChatbotSettings | null> => {
+    try {
+      const supabase = createPublicSupabase();
+      if (!supabase) return null;
+      const { data, error } = await supabase
+        .from("chatbot_settings")
+        .select("key, value")
+        .in("key", ["enabled", "chatbot_name", "welcome_message", "suggested_questions"]);
+      if (error) throw error;
+      
+      const settings: Partial<ChatbotSettings> = {};
+      data?.forEach((row) => {
+        const value = row.value as { value: unknown };
+        switch (row.key) {
+          case "enabled":
+            settings.enabled = value.value as boolean;
+            break;
+          case "chatbot_name":
+            settings.chatbot_name = value.value as string;
+            break;
+          case "welcome_message":
+            settings.welcome_message = value.value as string;
+            break;
+          case "suggested_questions":
+            settings.suggested_questions = value.value as string[];
+            break;
+        }
+      });
+      
+      return settings as ChatbotSettings;
+    } catch (e) {
+      console.error("[data] getChatbotSettings failed:", e);
+      return null;
+    }
+  },
+  ["chatbot-settings"],
+  { revalidate: 600, tags: ["chatbot-settings"] },
+);

@@ -1,30 +1,20 @@
-import { createServerClient } from "@supabase/ssr";
+/**
+ * Logout API route. Clears the admin session cookie.
+ */
+
 import { NextResponse, type NextRequest } from "next/server";
+import { COOKIE_NAME } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const response = NextResponse.redirect(new URL("/admin/login", request.url));
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json({ error: "Configuration error" }, { status: 500 });
-  }
-
-  const response = NextResponse.json({ success: true });
-
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
-      },
-    },
+  response.cookies.set(COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/",
   });
-
-  await supabase.auth.signOut();
 
   return response;
 }

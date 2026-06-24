@@ -105,3 +105,17 @@ export interface Post {
   created_at: string;
   updated_at: string;
 }
+
+export interface ChatbotSettings {
+  enabled: boolean;
+  chatbot_name: string;
+  welcome_message: string;
+  suggested_questions: string[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
