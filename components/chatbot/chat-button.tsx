@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
 import { MessageCircle, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ChatButtonProps {
   isOpen: boolean;
@@ -10,13 +10,25 @@ interface ChatButtonProps {
 }
 
 export function ChatButton({ isOpen, onClick }: ChatButtonProps) {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <motion.button
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: "spring", stiffness: 260, damping: 20, delay: 1 }}
+    <button
       onClick={onClick}
-      className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#6366f1] via-[#8b5cf6] to-[#06b6d4] text-white shadow-[0_0_30px_rgba(99,102,241,0.5)] transition-all hover:shadow-[0_0_40px_rgba(139,92,246,0.6)] hover:scale-110 md:bottom-8 md:right-8"
+      className={cn(
+        "fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full",
+        "bg-gradient-to-br from-[#6366f1] via-[#8b5cf6] to-[#06b6d4] text-white",
+        "shadow-[0_0_30px_rgba(99,102,241,0.5)] transition-all",
+        "hover:shadow-[0_0_40px_rgba(139,92,246,0.6)] hover:scale-110",
+        "md:bottom-8 md:right-8",
+        mounted ? "opacity-100 scale-100" : "opacity-0 scale-0"
+      )}
+      style={{ transition: "opacity 0.3s ease, transform 0.3s ease" }}
       aria-label={isOpen ? "Close chat" : "Open chat assistant"}
     >
       {isOpen ? (
@@ -30,6 +42,6 @@ export function ChatButton({ isOpen, onClick }: ChatButtonProps) {
           <span className="relative inline-flex h-3 w-3 rounded-full bg-[#06b6d4]" />
         </span>
       )}
-    </motion.button>
+    </button>
   );
 }

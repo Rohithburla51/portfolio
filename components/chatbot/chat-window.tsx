@@ -36,7 +36,11 @@ function saveHistory(messages: ChatMessage[]) {
 }
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  const h = date.getHours();
+  const m = date.getMinutes();
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
 export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
@@ -44,9 +48,15 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
   const [input, setInput] = React.useState("");
   const [isTyping, setIsTyping] = React.useState(false);
   const [isMinimized, setIsMinimized] = React.useState(false);
+  const [mounted, setMounted] = React.useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const hasInitialized = React.useRef(false);
+
+  // Track mounted state to avoid hydration mismatch
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Initialize with welcome message
   React.useEffect(() => {
