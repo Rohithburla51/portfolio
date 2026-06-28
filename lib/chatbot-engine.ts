@@ -80,46 +80,81 @@ export async function loadKnowledgeBase(): Promise<KnowledgeBase> {
 }
 
 /* ------------------------------------------------------------------ */
-/* Text similarity: simple token-overlap scoring                     */
+/* Enhanced text similarity with TF-IDF inspired weighting           */
 /* ------------------------------------------------------------------ */
+
+const STOP_WORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+  "have", "has", "had", "do", "does", "did", "will", "would", "could",
+  "should", "may", "might", "shall", "can", "need", "dare", "ought",
+  "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
+  "as", "into", "through", "during", "before", "after", "above", "below",
+  "between", "out", "off", "over", "under", "again", "further", "then",
+  "once", "here", "there", "when", "where", "why", "how", "all", "each",
+  "every", "both", "few", "more", "most", "other", "some", "such", "no",
+  "nor", "not", "only", "own", "same", "so", "than", "too", "very",
+  "just", "because", "and", "but", "or", "if", "while", "about", "what",
+  "which", "who", "whom", "this", "that", "these", "those", "am", "it",
+  "its", "he", "him", "his", "she", "her", "hers", "they", "them",
+  "their", "me", "my", "i", "you", "your", "we", "our", "tell",
+]);
 
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/[^a-z0-9\s+#.]/g, " ")
     .split(/\s+/)
-    .filter((t) => t.length > 2);
+    .filter((t) => t.length > 1 && !STOP_WORDS.has(t));
 }
 
-function similarity(a: string[], b: string[]): number {
-  const setB = new Set(b);
-  let matches = 0;
-  for (const token of a) {
-    if (setB.has(token)) matches++;
+function nGrams(tokens: string[], n: number): string[] {
+  const grams: string[] = [];
+  for (let i = 0; i <= tokens.length - n; i++) {
+    grams.push(tokens.slice(i, i + n).join(" "));
   }
-  return a.length > 0 ? matches / a.length : 0;
+  return grams;
 }
 
-function scoreDocument(query: string, ...fields: (string | null | undefined | string[])[]): number {
+function computeRelevance(query: string, ...fields: (string | null | undefined | string[])[]): number {
   const queryTokens = tokenize(query);
-  let bestScore = 0;
+  const queryBigrams = nGrams(queryTokens, 2);
+  let totalScore = 0;
 
   for (const field of fields) {
     if (!field) continue;
     const text = Array.isArray(field) ? field.join(" ") : field;
     const docTokens = tokenize(text);
-    const score = similarity(queryTokens, docTokens);
-    if (score > bestScore) bestScore = score;
+    const docSet = new Set(docTokens);
+    const docBigrams = new Set(nGrams(docTokens, 2));
+
+    // Unigram match
+    let unigramHits = 0;
+    for (const token of queryTokens) {
+      if (docSet.has(token)) unigramHits++;
+    }
+
+    // Bigram match (weighted higher)
+    let bigramHits = 0;
+    for (const bigram of queryBigrams) {
+      if (docBigrams.has(bigram)) bigramHits++;
+    }
+
+    const unigramScore = queryTokens.length > 0 ? unigramHits / queryTokens.length : 0;
+    const bigramScore = queryBigrams.length > 0 ? (bigramHits / queryBigrams.length) * 1.5 : 0;
+    const fieldScore = Math.min(1, unigramScore * 0.6 + bigramScore * 0.4);
+
+    if (fieldScore > totalScore) totalScore = fieldScore;
   }
 
-  return bestScore;
+  return totalScore;
 }
 
 /* ------------------------------------------------------------------ */
-/* Intent detection                                                   */
+/* Intent detection with confidence scoring                          */
 /* ------------------------------------------------------------------ */
 
 type Intent =
+  | "greeting"
   | "who_is"
   | "projects"
   | "project_detail"
@@ -131,34 +166,47 @@ type Intent =
   | "contact"
   | "social_links"
   | "blog"
+  | "thanks"
   | "general";
 
 function detectIntent(query: string): Intent {
-  const q = query.toLowerCase();
+  const q = query.toLowerCase().trim();
 
-  if (/\b(who|about|tell me about|介绍|bio)\b/.test(q) && /\brohith\b/.test(q)) return "who_is";
-  if (/\b(project|built|created|developed|portfolio)\b/.test(q) && /\b(ml|machine learning|ai|deep learning|computer vision|nlp)\b/.test(q)) return "project_detail";
-  if (/\b(project|built|created|developed|work|repository|repo|github)\b/.test(q)) return "projects";
-  if (/\b(skill|technolog|tech stack|stack|know|language|framework|tool|proficien)\b/.test(q)) return "skills";
-  if (/\b(certific|credential|course|training|cert)\b/.test(q)) return "certificates";
-  if (/\b(achiev|award|recognition|hackathon|competition|prize|trophy|winner)\b/.test(q)) return "achievements";
-  if (/\b(experience|work|job|intern|role|position|company|employ)\b/.test(q)) return "experience";
-  if (/\b(education|study|university|college|degree|b\.?tech|school|academic)\b/.test(q)) return "education";
-  if (/\b(contact|email|reach|phone|get in touch|mail)\b/.test(q)) return "contact";
-  if (/\b(github|linkedin|leetcode|geeksforgeeks|social|profile|link)\b/.test(q)) return "social_links";
-  if (/\b(blog|post|article|write|written|medium)\b/.test(q)) return "blog";
+  // Greetings
+  if (/^(hi|hello|hey|howdy|greetings|good\s*(morning|afternoon|evening)|sup|yo)\b/i.test(q) && q.length < 30) {
+    return "greeting";
+  }
+
+  // Thanks
+  if (/^(thanks?|thank\s*you|thx|appreciate|great|awesome|perfect|nice|cool)\b/i.test(q) && q.length < 50) {
+    return "thanks";
+  }
+
+  if (/\b(who|about|tell me about|introduce|background|bio|overview)\b/.test(q) && /\b(rohith|himself|him|he|portfolio owner)\b/.test(q)) return "who_is";
+  if (/\b(project|built|created|developed|portfolio)\b/.test(q) && /\b(ml|machine learning|ai|deep learning|computer vision|nlp|specific)\b/.test(q)) return "project_detail";
+  if (/\b(project|built|created|developed|work|repository|repo|github project|made)\b/.test(q)) return "projects";
+  if (/\b(skill|technolog|tech stack|stack|know|language|framework|tool|proficien|capable)\b/.test(q)) return "skills";
+  if (/\b(certific|credential|course|training|cert|certified)\b/.test(q)) return "certificates";
+  if (/\b(achiev|award|recognition|hackathon|competition|prize|trophy|winner|won|accomplishment)\b/.test(q)) return "achievements";
+  if (/\b(experience|work|job|intern|role|position|company|employ|career|profession)\b/.test(q)) return "experience";
+  if (/\b(education|study|university|college|degree|b\.?tech|school|academic|learn|studying)\b/.test(q)) return "education";
+  if (/\b(contact|email|reach|phone|get in touch|mail|hire|connect)\b/.test(q)) return "contact";
+  if (/\b(github|linkedin|leetcode|geeksforgeeks|social|profile|link|gfg|twitter|x\.com)\b/.test(q)) return "social_links";
+  if (/\b(blog|post|article|write|written|medium|publish)\b/.test(q)) return "blog";
 
   return "general";
 }
 
 /* ------------------------------------------------------------------ */
-/* Response generation                                                */
+/* Professional response generation                                   */
 /* ------------------------------------------------------------------ */
 
-function formatList(items: string[]): string {
-  if (items.length === 0) return "";
-  if (items.length === 1) return items[0] ?? "";
-  return items.slice(0, -1).join(", ") + ", and " + (items[items.length - 1] ?? "");
+function formatList(items: string[], limit?: number): string {
+  const list = limit ? items.slice(0, limit) : items;
+  if (list.length === 0) return "";
+  if (list.length === 1) return list[0] ?? "";
+  if (list.length === 2) return `${list[0]} and ${list[1]}`;
+  return list.slice(0, -1).join(", ") + ", and " + (list[list.length - 1] ?? "");
 }
 
 function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string {
@@ -166,51 +214,114 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
   const name = profile?.name ?? "Rohith";
 
   switch (intent) {
-    case "who_is": {
-      const parts: string[] = [];
-      parts.push(`${name} is ${profile?.title ?? "an AI & ML Engineer"}.`);
-      if (profile?.about_me) parts.push(profile.about_me);
-      if (profile?.location) parts.push(`He is based in ${profile.location}.`);
-      if (kb.projects.length > 0) {
-        const projectNames = kb.projects.map((p) => p.title);
-        parts.push(`He has built notable projects like ${formatList(projectNames)}.`);
-      }
-      if (kb.achievements.length > 0 && kb.achievements[0]) {
-        parts.push(`Among his achievements are ${kb.achievements[0].title}.`);
-      }
-      return parts.join(" ");
+    case "greeting": {
+      const greetings = [
+        `Hello! I'm ${name}'s portfolio assistant. I can help you learn about his projects, skills, experience, and more. What would you like to know?`,
+        `Hi there! Welcome to ${name}'s portfolio. Feel free to ask me about his work, achievements, or how to get in touch.`,
+        `Hey! I'm here to help you explore ${name}'s portfolio. Ask me anything about his projects, skills, or background.`,
+      ];
+      return greetings[Math.floor(Math.random() * greetings.length)] ?? greetings[0]!;
     }
 
-    case "projects": {
-      if (kb.projects.length === 0)
-        return "Rohith hasn't added any featured projects to his portfolio yet.";
-      const parts: string[] = [
-        `Rohith has ${kb.projects.length} featured project${kb.projects.length > 1 ? "s" : ""} in his portfolio:`,
+    case "thanks": {
+      const responses = [
+        "You're welcome! Let me know if there's anything else you'd like to know about Rohith's work.",
+        "Happy to help! Feel free to ask if you have more questions.",
+        "Glad I could help! Don't hesitate to ask anything else about the portfolio.",
       ];
-      for (const p of kb.projects) {
-        const techs = p.technologies?.length ? ` (built with ${formatList(p.technologies.slice(0, 4))})` : "";
-        const link = p.github_url ? ` — ${p.github_url}` : "";
-        parts.push(`• ${p.title}: ${p.tagline ?? "No description"}${techs}${link}`);
+      return responses[Math.floor(Math.random() * responses.length)] ?? responses[0]!;
+    }
+
+    case "who_is": {
+      const parts: string[] = [];
+      parts.push(`**${name}** is ${profile?.title ?? "an AI & ML Engineer"}.`);
+      if (profile?.about_me) {
+        parts.push("");
+        parts.push(profile.about_me);
+      }
+      if (profile?.location) {
+        parts.push("");
+        parts.push(`📍 Based in ${profile.location}`);
+      }
+      if (kb.projects.length > 0) {
+        parts.push("");
+        const topProjects = kb.projects.slice(0, 3).map((p) => p.title);
+        parts.push(`He has built notable projects including **${formatList(topProjects)}**.`);
+      }
+      if (kb.achievements.length > 0) {
+        parts.push(`He has **${kb.achievements.length}** notable achievements in hackathons, competitions, and academic excellence.`);
+      }
+      if (kb.certificates.length > 0) {
+        parts.push(`He holds **${kb.certificates.length}** professional certifications.`);
       }
       return parts.join("\n");
     }
 
-    case "project_detail": {
-      const q = query.toLowerCase();
-      const matched = kb.projects.filter((p) => {
-        const haystack = `${p.title} ${p.tagline ?? ""} ${p.long_description ?? ""} ${(p.technologies ?? []).join(" ")}`.toLowerCase();
-        return scoreDocument(query, haystack) > 0.2;
-      });
-      if (matched.length === 0) {
-        return `Rohith has worked on various ML/AI projects. Here are some: ${formatList(kb.projects.map((p) => p.title))}. Ask me about any specific project!`;
+    case "projects": {
+      if (kb.projects.length === 0)
+        return "No featured projects have been added to the portfolio yet. Check back soon!";
+
+      const parts: string[] = [
+        `${name} has **${kb.projects.length}** featured projects in his portfolio:\n`,
+      ];
+      for (const p of kb.projects) {
+        const techs = p.technologies?.length
+          ? ` — _${formatList(p.technologies.slice(0, 4))}_`
+          : "";
+        parts.push(`**${p.title}**${techs}`);
+        if (p.tagline) parts.push(`${p.tagline}`);
+        if (p.github_url) parts.push(`🔗 [GitHub](${p.github_url})`);
+        parts.push("");
       }
+      parts.push("Would you like to know more about any specific project?");
+      return parts.join("\n");
+    }
+
+    case "project_detail": {
+      const matched = kb.projects
+        .map((p) => ({
+          project: p,
+          score: computeRelevance(
+            query,
+            p.title,
+            p.tagline,
+            p.long_description,
+            p.technologies
+          ),
+        }))
+        .filter((m) => m.score > 0.15)
+        .sort((a, b) => b.score - a.score);
+
+      if (matched.length === 0) {
+        const allNames = kb.projects.map((p) => `**${p.title}**`);
+        return `Here are all of ${name}'s projects: ${formatList(allNames)}.\n\nAsk me about any of these for more details!`;
+      }
+
       const parts: string[] = [];
-      for (const p of matched.slice(0, 3)) {
-        parts.push(`**${p.title}**: ${p.tagline ?? ""}`);
-        if (p.long_description) parts.push(p.long_description.slice(0, 300) + (p.long_description.length > 300 ? "..." : ""));
-        if (p.technologies?.length) parts.push(`Technologies: ${formatList(p.technologies)}`);
-        if (p.highlights?.length) parts.push(`Highlights: ${formatList(p.highlights.slice(0, 3))}`);
-        if (p.github_url) parts.push(`GitHub: ${p.github_url}`);
+      for (const { project: p } of matched.slice(0, 2)) {
+        parts.push(`### ${p.title}`);
+        if (p.tagline) parts.push(`*${p.tagline}*`);
+        parts.push("");
+        if (p.long_description) {
+          const desc = p.long_description.length > 400
+            ? p.long_description.slice(0, 400) + "..."
+            : p.long_description;
+          parts.push(desc);
+          parts.push("");
+        }
+        if (p.technologies?.length) {
+          parts.push(`**Tech Stack:** ${formatList(p.technologies)}`);
+        }
+        if (p.highlights?.length) {
+          parts.push(`**Key Highlights:**`);
+          for (const h of p.highlights.slice(0, 4)) {
+            parts.push(`• ${h}`);
+          }
+        }
+        const links: string[] = [];
+        if (p.github_url) links.push(`[GitHub](${p.github_url})`);
+        if (p.live_url) links.push(`[Live Demo](${p.live_url})`);
+        if (links.length > 0) parts.push(`\n🔗 ${links.join(" | ")}`);
         parts.push("");
       }
       return parts.join("\n").trim();
@@ -222,147 +333,233 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
       kb.experiences.forEach((e) => e.technologies?.forEach((t) => allTechs.add(t)));
 
       if (allTechs.size === 0) {
-        return `${name} is an ${profile?.title ?? "AI & ML Engineer"} with expertise in Machine Learning, Computer Vision, and NLP. Check his portfolio for the latest skills.`;
+        return `${name} is ${profile?.title ?? "an AI & ML Engineer"} with expertise in Machine Learning, Deep Learning, Computer Vision, and NLP. Visit his portfolio for the complete skill set.`;
       }
 
       const techs = Array.from(allTechs);
-      const mlTechs = techs.filter((t) => /python|pytorch|tensorflow|keras|opencv|ml|dl|nlp|llm/i.test(t));
-      const webTechs = techs.filter((t) => /react|next|node|flask|fastapi|html|css|js/i.test(t));
-      const otherTechs = techs.filter((t) => !mlTechs.includes(t) && !webTechs.includes(t));
+      const categories: Record<string, string[]> = {
+        "🤖 AI/ML": [],
+        "🌐 Web Development": [],
+        "🗄️ Databases & Cloud": [],
+        "🛠️ Tools & Other": [],
+      };
 
-      const parts: string[] = [`${name} has skills across ${techs.length}+ technologies:`];
-      if (mlTechs.length > 0) parts.push(`• AI/ML: ${formatList(mlTechs)}`);
-      if (webTechs.length > 0) parts.push(`• Web: ${formatList(webTechs)}`);
-      if (otherTechs.length > 0) parts.push(`• Other: ${formatList(otherTechs)}`);
+      for (const t of techs) {
+        if (/python|pytorch|tensorflow|keras|opencv|scikit|ml|dl|nlp|llm|hugging|transformers|yolo|mediapipe|langchain/i.test(t)) {
+          categories["🤖 AI/ML"]!.push(t);
+        } else if (/react|next|node|flask|fastapi|html|css|js|javascript|typescript|tailwind|express|django|angular|vue/i.test(t)) {
+          categories["🌐 Web Development"]!.push(t);
+        } else if (/sql|postgres|mongo|firebase|supabase|aws|gcp|azure|docker|redis|prisma/i.test(t)) {
+          categories["🗄️ Databases & Cloud"]!.push(t);
+        } else {
+          categories["🛠️ Tools & Other"]!.push(t);
+        }
+      }
+
+      const parts: string[] = [`${name} has expertise across **${techs.length}+** technologies:\n`];
+      for (const [category, items] of Object.entries(categories)) {
+        if (items.length > 0) {
+          parts.push(`${category}: ${formatList(items)}`);
+        }
+      }
       return parts.join("\n");
     }
 
     case "certificates": {
       if (kb.certificates.length === 0)
-        return "Rohith hasn't added any certificates yet. Check back soon!";
+        return "No certificates have been added yet. Check back soon!";
+
       const parts: string[] = [
-        `Rohith has ${kb.certificates.length} professional certifications:`,
+        `${name} holds **${kb.certificates.length}** professional certifications:\n`,
       ];
+
+      // Group by category
+      const grouped: Record<string, Certificate[]> = {};
       for (const c of kb.certificates) {
-        parts.push(`• ${c.name} — ${c.organization} (${c.category ?? "General"})`);
+        const cat = c.category ?? "General";
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat]!.push(c);
       }
-      return parts.join("\n");
+
+      for (const [category, certs] of Object.entries(grouped)) {
+        parts.push(`**${category}:**`);
+        for (const c of certs) {
+          parts.push(`• ${c.name} — _${c.organization}_`);
+        }
+        parts.push("");
+      }
+      return parts.join("\n").trim();
     }
 
     case "achievements": {
       if (kb.achievements.length === 0)
-        return "Rohith hasn't added any achievements yet. Check back soon!";
+        return "No achievements have been listed yet. Check back soon!";
+
       const parts: string[] = [
-        `Rohith has ${kb.achievements.length} notable achievements:`,
+        `${name} has **${kb.achievements.length}** notable achievements:\n`,
       ];
       for (const a of kb.achievements) {
-        const desc = a.description ? ` — ${a.description.slice(0, 150)}` : "";
-        parts.push(`• ${a.title}${desc}`);
+        const desc = a.description ? ` — ${a.description.slice(0, 120)}${a.description.length > 120 ? "..." : ""}` : "";
+        const icon = a.category === "hackathon" ? "🏆" : a.category === "coding" ? "💻" : a.category === "academic" ? "🎓" : "⭐";
+        parts.push(`${icon} **${a.title}**${desc}`);
       }
       return parts.join("\n");
     }
 
     case "experience": {
       if (kb.experiences.length === 0)
-        return "Rohith hasn't added any work experience yet. He's currently pursuing his B.Tech at CMR College.";
-      const parts: string[] = [`${name}'s professional experience:`];
+        return `${name} is currently focused on building his portfolio of projects and pursuing his B.Tech in CSE (AI & ML). He's open to internship and collaboration opportunities!`;
+
+      const parts: string[] = [`**${name}'s Professional Experience:**\n`];
       for (const e of kb.experiences) {
-        parts.push(`• ${e.role} at ${e.company} (${e.duration})`);
-        if (e.description) parts.push(`  ${e.description.slice(0, 200)}`);
-        if (e.technologies?.length) parts.push(`  Technologies: ${formatList(e.technologies)}`);
+        parts.push(`### ${e.role} at ${e.company}`);
+        parts.push(`📅 ${e.duration}`);
+        if (e.description) parts.push(`\n${e.description.slice(0, 300)}${e.description.length > 300 ? "..." : ""}`);
+        if (e.technologies?.length) parts.push(`\n**Technologies:** ${formatList(e.technologies)}`);
+        parts.push("");
       }
-      return parts.join("\n");
+      return parts.join("\n").trim();
     }
 
     case "education": {
-      return `${name} is pursuing a B.Tech in CSE (AI & ML) at CMR College of Engineering and Technology, expected to graduate in 2027. He is consistently in the top 10% of his cohort.`;
+      const parts: string[] = [];
+      parts.push(`**Education:**\n`);
+      parts.push(`🎓 **B.Tech in CSE (AI & ML)**`);
+      parts.push(`CMR College of Engineering and Technology`);
+      parts.push(`Expected Graduation: 2027`);
+      parts.push("");
+      parts.push(`${name} is consistently in the top 10% of his cohort, with a strong focus on Machine Learning, Deep Learning, and practical AI applications.`);
+      return parts.join("\n");
     }
 
     case "contact": {
-      const parts: string[] = [];
-      if (profile?.email) parts.push(`Email: ${profile.email}`);
-      if (profile?.phone) parts.push(`Phone: ${profile.phone}`);
-      if (profile?.location) parts.push(`Location: ${profile.location}`);
-      if (profile?.resume_url) parts.push(`Resume: ${profile.resume_url}`);
-      parts.push("You can also reach out via the contact form on this portfolio.");
+      const parts: string[] = [`Here's how you can reach **${name}**:\n`];
+      if (profile?.email) parts.push(`📧 Email: ${profile.email}`);
+      if (profile?.phone) parts.push(`📱 Phone: ${profile.phone}`);
+      if (profile?.location) parts.push(`📍 Location: ${profile.location}`);
+      if (profile?.linkedin_url) parts.push(`💼 LinkedIn: ${profile.linkedin_url}`);
+      if (profile?.github_url) parts.push(`🐙 GitHub: ${profile.github_url}`);
+      if (profile?.resume_url) parts.push(`📄 Resume: ${profile.resume_url}`);
+      parts.push("");
+      parts.push("You can also use the **contact form** on this portfolio to send a direct message.");
       return parts.join("\n");
     }
 
     case "social_links": {
-      const parts: string[] = [];
-      if (profile?.github_url) parts.push(`GitHub: ${profile.github_url}`);
-      if (profile?.linkedin_url) parts.push(`LinkedIn: ${profile.linkedin_url}`);
+      const parts: string[] = [`**${name}'s Online Profiles:**\n`];
+      if (profile?.github_url) parts.push(`🐙 GitHub: ${profile.github_url}`);
+      if (profile?.linkedin_url) parts.push(`💼 LinkedIn: ${profile.linkedin_url}`);
+
       const q = query.toLowerCase();
-      if (q.includes("leetcode")) {
-        parts.push(`LeetCode: https://leetcode.com/u/ROHITH_PROGRAMMER/`);
+      if (q.includes("leetcode") || q.includes("coding")) {
+        parts.push(`💻 LeetCode: https://leetcode.com/u/ROHITH_PROGRAMMER/`);
       }
       if (q.includes("geeksforgeeks") || q.includes("gfg")) {
-        parts.push(`GeeksforGeeks: https://www.geeksforgeeks.org/profile/burlaroh84ul`);
+        parts.push(`📗 GeeksforGeeks: https://www.geeksforgeeks.org/profile/burlaroh84ul`);
       }
-      if (parts.length === 0) {
-        parts.push("You can find Rohith's profiles on GitHub, LinkedIn, and LeetCode.");
+
+      // If generic social links request, show all
+      if (!q.includes("leetcode") && !q.includes("gfg") && !q.includes("geeksforgeeks")) {
+        parts.push(`💻 LeetCode: https://leetcode.com/u/ROHITH_PROGRAMMER/`);
+        parts.push(`📗 GeeksforGeeks: https://www.geeksforgeeks.org/profile/burlaroh84ul`);
       }
+
       return parts.join("\n");
     }
 
     case "blog": {
       if (kb.posts.length === 0)
-        return "Rohith hasn't published any blog posts yet. Stay tuned for technical articles and insights!";
-      const parts: string[] = [`Rohith has ${kb.posts.length} published blog posts:`];
+        return `${name} hasn't published any blog posts yet. Stay tuned for technical articles and insights!`;
+
+      const parts: string[] = [`${name} has published **${kb.posts.length}** articles:\n`];
       for (const p of kb.posts.slice(0, 5)) {
-        const excerpt = p.excerpt ? `: ${p.excerpt.slice(0, 100)}` : "";
-        parts.push(`• ${p.title}${excerpt}`);
+        const tags = p.tags?.length ? ` [${p.tags.slice(0, 3).join(", ")}]` : "";
+        parts.push(`📝 **${p.title}**${tags}`);
+        if (p.excerpt) parts.push(`   ${p.excerpt.slice(0, 100)}${p.excerpt.length > 100 ? "..." : ""}`);
+        parts.push("");
       }
-      return parts.join("\n");
+      if (kb.posts.length > 5) {
+        parts.push(`_...and ${kb.posts.length - 5} more articles._`);
+      }
+      return parts.join("\n").trim();
     }
 
     case "general":
     default: {
       // Score all documents and find best matches
-      const scores: { type: string; item: string; score: number }[] = [];
+      const scores: { type: string; title: string; detail: string; score: number }[] = [];
+
       kb.projects.forEach((p) => {
-        const s = scoreDocument(query, p.title, p.tagline, p.long_description, p.technologies);
-        if (s > 0.1) scores.push({ type: "project", item: p.title, score: s });
+        const s = computeRelevance(query, p.title, p.tagline, p.long_description, p.technologies);
+        if (s > 0.15) scores.push({
+          type: "Project",
+          title: p.title,
+          detail: p.tagline ?? "",
+          score: s,
+        });
       });
       kb.certificates.forEach((c) => {
-        const s = scoreDocument(query, c.name, c.organization, c.category);
-        if (s > 0.1) scores.push({ type: "certificate", item: c.name, score: s });
+        const s = computeRelevance(query, c.name, c.organization, c.category);
+        if (s > 0.15) scores.push({
+          type: "Certificate",
+          title: c.name,
+          detail: c.organization,
+          score: s,
+        });
       });
       kb.achievements.forEach((a) => {
-        const s = scoreDocument(query, a.title, a.description, a.category);
-        if (s > 0.1) scores.push({ type: "achievement", item: a.title, score: s });
+        const s = computeRelevance(query, a.title, a.description, a.category);
+        if (s > 0.15) scores.push({
+          type: "Achievement",
+          title: a.title,
+          detail: a.description?.slice(0, 80) ?? "",
+          score: s,
+        });
       });
       kb.experiences.forEach((e) => {
-        const s = scoreDocument(query, e.role, e.company, e.description);
-        if (s > 0.1) scores.push({ type: "experience", item: e.role, score: s });
+        const s = computeRelevance(query, e.role, e.company, e.description, e.technologies);
+        if (s > 0.15) scores.push({
+          type: "Experience",
+          title: `${e.role} at ${e.company}`,
+          detail: e.duration,
+          score: s,
+        });
       });
       kb.posts.forEach((p) => {
-        const s = scoreDocument(query, p.title, p.excerpt, p.tags);
-        if (s > 0.1) scores.push({ type: "blog post", item: p.title, score: s });
+        const s = computeRelevance(query, p.title, p.excerpt, p.tags);
+        if (s > 0.15) scores.push({
+          type: "Blog Post",
+          title: p.title,
+          detail: p.excerpt?.slice(0, 80) ?? "",
+          score: s,
+        });
       });
 
       scores.sort((a, b) => b.score - a.score);
-      const top = scores.slice(0, 3);
+      const top = scores.slice(0, 4);
 
       if (top.length > 0) {
-        const parts: string[] = ["Here's what I found in Rohith's portfolio:"];
+        const parts: string[] = ["Here's what I found relevant in the portfolio:\n"];
         for (const match of top) {
-          parts.push(`• ${match.type.charAt(0).toUpperCase() + match.type.slice(1)}: ${match.item}`);
+          parts.push(`**${match.type}:** ${match.title}`);
+          if (match.detail) parts.push(`_${match.detail}_`);
+          parts.push("");
         }
-        parts.push("");
-        parts.push("Would you like to know more about any of these?");
+        parts.push("Would you like more details on any of these?");
         return parts.join("\n");
       }
 
-      return `I'm not sure I understand that question. Here are some things I can help with:
-• Who Rohith is and his background
-• His projects and technologies
-• His certifications and achievements
-• His experience and education
-• How to contact him
-• His social media links
+      return `I appreciate your question! While I don't have a specific answer for that, here's what I can help you with:
 
-Try asking something like "What ML projects has Rohith built?" or "Tell me about his certifications."`;
+• **About Rohith** — his background, education, and interests
+• **Projects** — the applications and systems he's built
+• **Skills** — his technical expertise and tech stack
+• **Certifications** — professional credentials
+• **Achievements** — hackathons, competitions, and awards
+• **Experience** — professional and internship work
+• **Contact** — how to reach him or collaborate
+
+Try asking something like "What projects has Rohith built?" or "Tell me about his achievements."`;
     }
   }
 }
@@ -373,11 +570,20 @@ Try asking something like "What ML projects has Rohith built?" or "Tell me about
 
 export async function generateResponse(query: string): Promise<string> {
   try {
+    // Basic input validation
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return "Please type a question and I'll do my best to help!";
+    }
+    if (trimmed.length > 500) {
+      return "That's quite a long message! Could you try asking a more specific question? I work best with focused queries about Rohith's portfolio.";
+    }
+
     const kb = await loadKnowledgeBase();
-    const intent = detectIntent(query);
-    return buildResponse(intent, query, kb);
+    const intent = detectIntent(trimmed);
+    return buildResponse(intent, trimmed, kb);
   } catch (e) {
     console.error("[chatbot] generateResponse failed:", e);
-    return "Sorry, I'm having trouble accessing the portfolio data right now. Please try again in a moment.";
+    return "I'm having trouble accessing the portfolio data right now. Please try again in a moment.";
   }
 }

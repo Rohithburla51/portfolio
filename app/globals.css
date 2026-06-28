@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ---------------------------------------------------------------- */
 /* Design tokens — Editorial Tech Noir                               */
 /* ---------------------------------------------------------------- */
@@ -53,6 +55,10 @@
   color-scheme: dark;
 }
 
+.light {
+  color-scheme: light;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -65,6 +71,30 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Light mode overrides */
+.light,
+.light body {
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-glass: rgba(255, 255, 255, 0.7);
+  --color-glass-hover: rgba(255, 255, 255, 0.85);
+  --gradient-mesh: radial-gradient(
+      at 20% 20%,
+      rgba(99, 102, 241, 0.08) 0px,
+      transparent 50%
+    ),
+    radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.06) 0px, transparent 50%),
+    radial-gradient(at 50% 80%, rgba(6, 182, 212, 0.06) 0px, transparent 50%);
+  --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.1);
+  --shadow-glow-lg: 0 0 80px rgba(99, 102, 241, 0.15);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08);
+  background: #f8fafc;
+  color: #1e293b;
 }
 
 body {
@@ -84,10 +114,19 @@ body::before {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+.light body::before {
+  opacity: 0.015;
+}
+
 /* Selection */
 ::selection {
   background: rgba(139, 92, 246, 0.35);
   color: #f8fafc;
+}
+
+.light ::selection {
+  background: rgba(99, 102, 241, 0.2);
+  color: #1e293b;
 }
 
 /* Scrollbar */
@@ -103,6 +142,17 @@ body::before {
   border-radius: 5px;
 }
 ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #818cf8, #a78bfa);
+}
+
+.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.light ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #a5b4fc, #c4b5fd);
+  border-radius: 5px;
+}
+.light ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #818cf8, #a78bfa);
 }
 
@@ -125,11 +175,17 @@ body::before {
 .prose h3,
 .prose h4 {
   font-family: var(--font-display);
-  color: #fff;
+  color: inherit;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
   letter-spacing: -0.01em;
   font-weight: 600;
+}
+.dark .prose h1,
+.dark .prose h2,
+.dark .prose h3,
+.dark .prose h4 {
+  color: #fff;
 }
 .prose h1 {
   font-size: 2em;
@@ -248,6 +304,12 @@ body::before {
     border: 1px solid var(--color-border);
   }
 
+  .light .glass {
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  }
+
   .glass-hover {
     transition:
       background 0.3s ease,
@@ -291,6 +353,55 @@ body::before {
       color: black;
     }
   }
+}
+
+/* ---------------------------------------------------------------- */
+/* Light mode adaptations for section components                     */
+/* ---------------------------------------------------------------- */
+.light .glass-hover:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Section headings in light mode */
+.light h1:not([class*="text-"]),
+.light h2:not([class*="text-"]),
+.light h3:not([class*="text-"]) {
+  color: #1e293b;
+}
+
+/* Hover text adapt */
+.light .hover\:text-white:hover {
+  color: #1e293b !important;
+}
+
+/* Border adaptations */
+.light [class*="border-white/"] {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* bg-white/5 and bg-white/10 adaptations */
+.light [class*="bg-white/5"],
+.light [class*="bg-white/[0.05]"] {
+  background-color: rgba(241, 245, 249, 0.8);
+}
+
+.light [class*="bg-white/10"],
+.light [class*="bg-white/[0.1]"] {
+  background-color: rgba(241, 245, 249, 0.9);
+}
+
+/* Contact form inputs in light mode */
+.light input[class*="bg-white/5"],
+.light textarea[class*="bg-white/5"] {
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+  color: #1e293b;
+}
+
+.light input[class*="bg-white/5"]::placeholder,
+.light textarea[class*="bg-white/5"]::placeholder {
+  color: #94a3b8;
 }
 
 /* ---------------------------------------------------------------- */

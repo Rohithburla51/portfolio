@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Trash2, Minimize2, Loader2 } from "lucide-react";
+import { Send, Trash2, Minimize2, Loader2, Bot } from "lucide-react";
+import { useTheme } from "next-themes";
 import { generateResponse } from "@/lib/chatbot-engine";
 import type { ChatMessage, ChatbotSettings } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -43,7 +44,106 @@ function formatTime(date: Date): string {
   return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
+/** Simple markdown-to-JSX renderer for chat messages */
+function renderMarkdown(text: string): React.ReactNode[] {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+
+    if (line.startsWith("### ")) {
+      elements.push(
+        <h4 key={i} className="mt-2 mb-1 text-sm font-semibold">
+          {renderInline(line.slice(4))}
+        </h4>
+      );
+    } else if (line.startsWith("## ")) {
+      elements.push(
+        <h3 key={i} className="mt-2 mb-1 text-sm font-bold">
+          {renderInline(line.slice(3))}
+        </h3>
+      );
+    } else if (line.startsWith("• ") || line.startsWith("- ")) {
+      elements.push(
+        <div key={i} className="ml-2 flex gap-1.5 text-[13px] leading-relaxed">
+          <span className="shrink-0 opacity-60">•</span>
+          <span>{renderInline(line.slice(2))}</span>
+        </div>
+      );
+    } else if (line.trim() === "") {
+      elements.push(<div key={i} className="h-1.5" />);
+    } else {
+      elements.push(
+        <p key={i} className="text-[13px] leading-relaxed">
+          {renderInline(line)}
+        </p>
+      );
+    }
+  }
+
+  return elements;
+}
+
+function renderInline(text: string): React.ReactNode {
+  // Handle **bold**, *italic*, _italic_, `code`, and [links](url)
+  const parts: React.ReactNode[] = [];
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_|`(.+?)`|\[(.+?)\]\((.+?)\)|🔗|📧|📱|📍|💼|🐙|📄|📝|🏆|💻|🎓|⭐|🤖|🌐|🗄️|🛠️)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    if (match[2]) {
+      // **bold**
+      parts.push(<strong key={match.index} className="font-semibold">{match[2]}</strong>);
+    } else if (match[3]) {
+      // *italic*
+      parts.push(<em key={match.index} className="italic opacity-80">{match[3]}</em>);
+    } else if (match[4]) {
+      // _italic_
+      parts.push(<em key={match.index} className="italic opacity-80">{match[4]}</em>);
+    } else if (match[5]) {
+      // `code`
+      parts.push(
+        <code key={match.index} className="rounded bg-black/10 px-1 py-0.5 text-xs font-mono dark:bg-white/10">
+          {match[5]}
+        </code>
+      );
+    } else if (match[6] && match[7]) {
+      // [text](url)
+      parts.push(
+        <a
+          key={match.index}
+          href={match[7]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#6366f1] underline underline-offset-2 hover:text-[#8b5cf6] dark:text-[#a5b4fc] dark:hover:text-[#c4b5fd]"
+        >
+          {match[6]}
+        </a>
+      );
+    } else {
+      // Emoji pass-through
+      parts.push(match[0]);
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length === 1 ? parts[0] : <>{parts}</>;
+}
+
 export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [input, setInput] = React.useState("");
   const [isTyping, setIsTyping] = React.useState(false);
@@ -53,16 +153,14 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const hasInitialized = React.useRef(false);
 
-  // Track mounted state to avoid hydration mismatch
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Initialize with welcome message
   React.useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
-    
+
     const saved = loadHistory();
     if (saved.length > 0) {
       setMessages(saved);
@@ -78,12 +176,10 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
     }
   }, [settings]);
 
-  // Auto scroll
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  // Focus input when opened
   React.useEffect(() => {
     if (isOpen && !isMinimized) {
       setTimeout(() => inputRef.current?.focus(), 300);
@@ -170,31 +266,41 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
       {isOpen && (
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={isMinimized 
-            ? { opacity: 1, y: 0, scale: 1, height: 52 } 
-            : { opacity: 1, y: 0, scale: 1, height: "auto" }
+          animate={
+            isMinimized
+              ? { opacity: 1, y: 0, scale: 1, height: 56 }
+              : { opacity: 1, y: 0, scale: 1, height: "auto" }
           }
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
           transition={{ type: "spring", stiffness: 300, damping: 25 }}
           className={cn(
-            "fixed bottom-24 right-4 z-50 flex w-[360px] flex-col overflow-hidden rounded-2xl border border-white/[0.1]",
-            "bg-[rgba(15,23,42,0.95)] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.5)]",
-            "md:right-8",
-            isMinimized ? "h-[52px]" : "max-h-[500px]"
+            "fixed bottom-24 right-4 z-50 flex w-[380px] flex-col overflow-hidden rounded-2xl",
+            "shadow-2xl md:right-8",
+            isDark
+              ? "border border-white/[0.1] bg-[rgba(15,23,42,0.97)] backdrop-blur-xl"
+              : "border border-slate-200 bg-white/[0.98] backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.12)]",
+            isMinimized ? "h-[56px]" : "max-h-[520px]"
           )}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/[0.08] bg-gradient-to-r from-[#6366f1]/20 via-[#8b5cf6]/20 to-[#06b6d4]/20 px-4 py-3">
+          <div
+            className={cn(
+              "flex items-center justify-between px-4 py-3",
+              isDark
+                ? "border-b border-white/[0.08] bg-gradient-to-r from-[#6366f1]/15 via-[#8b5cf6]/15 to-[#06b6d4]/15"
+                : "border-b border-slate-100 bg-gradient-to-r from-[#6366f1]/5 via-[#8b5cf6]/5 to-[#06b6d4]/5"
+            )}
+          >
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#6366f1] to-[#06b6d4]">
-                <span className="text-xs font-bold text-white">AI</span>
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#6366f1] to-[#06b6d4]">
+                <Bot className="h-4 w-4 text-white" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">
+                <p className={cn("text-sm font-semibold", isDark ? "text-white" : "text-slate-900")}>
                   {settings?.chatbot_name ?? "Portfolio Assistant"}
                 </p>
-                <p className="flex items-center gap-1.5 text-xs text-[#94a3b8]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                <p className={cn("flex items-center gap-1.5 text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   Online
                 </p>
               </div>
@@ -202,14 +308,24 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
             <div className="flex items-center gap-1">
               <button
                 onClick={handleClear}
-                className="rounded-lg p-1.5 text-[#94a3b8] transition-colors hover:bg-white/[0.08] hover:text-white"
+                className={cn(
+                  "rounded-lg p-2 transition-colors",
+                  isDark
+                    ? "text-slate-400 hover:bg-white/[0.08] hover:text-white"
+                    : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                )}
                 aria-label="Clear chat"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setIsMinimized(!isMinimized)}
-                className="rounded-lg p-1.5 text-[#94a3b8] transition-colors hover:bg-white/[0.08] hover:text-white"
+                className={cn(
+                  "rounded-lg p-2 transition-colors",
+                  isDark
+                    ? "text-slate-400 hover:bg-white/[0.08] hover:text-white"
+                    : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                )}
                 aria-label={isMinimized ? "Expand" : "Minimize"}
               >
                 <Minimize2 className="h-4 w-4" />
@@ -220,7 +336,13 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
           {/* Messages */}
           {!isMinimized && (
             <>
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ maxHeight: 340 }}>
+              <div
+                className={cn(
+                  "flex-1 overflow-y-auto px-4 py-4 space-y-3",
+                  isDark ? "bg-[#0c1222]" : "bg-slate-50/50"
+                )}
+                style={{ maxHeight: 350 }}
+              >
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
@@ -231,17 +353,30 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
                   >
                     <div
                       className={cn(
-                        "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                        "max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed",
                         msg.role === "user"
                           ? "bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] text-white rounded-br-md"
-                          : "bg-white/[0.06] text-[#e2e8f0] rounded-bl-md border border-white/[0.06]"
+                          : isDark
+                            ? "bg-white/[0.06] text-slate-200 rounded-bl-md border border-white/[0.06]"
+                            : "bg-white text-slate-700 rounded-bl-md border border-slate-100 shadow-sm"
                       )}
                     >
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
-                      <p className={cn(
-                        "mt-1 text-[10px]",
-                        msg.role === "user" ? "text-white/50" : "text-[#64748b]"
-                      )}>
+                      <div>
+                        {msg.role === "assistant"
+                          ? renderMarkdown(msg.content)
+                          : <span className="whitespace-pre-wrap">{msg.content}</span>
+                        }
+                      </div>
+                      <p
+                        className={cn(
+                          "mt-1.5 text-[10px]",
+                          msg.role === "user"
+                            ? "text-white/50"
+                            : isDark
+                              ? "text-slate-500"
+                              : "text-slate-400"
+                        )}
+                      >
                         {formatTime(msg.timestamp)}
                       </p>
                     </div>
@@ -250,9 +385,18 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
 
                 {isTyping && (
                   <div className="flex justify-start">
-                    <div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-white/[0.06] px-4 py-3 border border-white/[0.06]">
-                      <Loader2 className="h-4 w-4 animate-spin text-[#8b5cf6]" />
-                      <span className="text-xs text-[#94a3b8]">Thinking...</span>
+                    <div
+                      className={cn(
+                        "flex items-center gap-2 rounded-2xl rounded-bl-md px-4 py-3",
+                        isDark
+                          ? "bg-white/[0.06] border border-white/[0.06]"
+                          : "bg-white border border-slate-100 shadow-sm"
+                      )}
+                    >
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#8b5cf6]" />
+                      <span className={cn("text-xs", isDark ? "text-slate-400" : "text-slate-500")}>
+                        Thinking...
+                      </span>
                     </div>
                   </div>
                 )}
@@ -260,16 +404,28 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Suggested questions (show when few messages) */}
+              {/* Suggested questions */}
               {messages.length <= 1 && (
-                <div className="border-t border-white/[0.06] px-4 py-3">
-                  <p className="mb-2 text-xs font-medium text-[#64748b]">Suggested:</p>
+                <div
+                  className={cn(
+                    "px-4 py-3",
+                    isDark ? "border-t border-white/[0.06]" : "border-t border-slate-100"
+                  )}
+                >
+                  <p className={cn("mb-2 text-xs font-medium", isDark ? "text-slate-500" : "text-slate-400")}>
+                    Quick questions:
+                  </p>
                   <div className="flex flex-wrap gap-1.5">
                     {suggestedQuestions.slice(0, 3).map((q) => (
                       <button
                         key={q}
                         onClick={() => handleSuggestion(q)}
-                        className="rounded-full bg-white/[0.05] border border-white/[0.08] px-3 py-1.5 text-xs text-[#94a3b8] transition-all hover:bg-[#6366f1]/20 hover:text-white hover:border-[#6366f1]/30"
+                        className={cn(
+                          "rounded-full px-3 py-1.5 text-xs transition-all",
+                          isDark
+                            ? "bg-white/[0.05] border border-white/[0.08] text-slate-400 hover:bg-[#6366f1]/20 hover:text-white hover:border-[#6366f1]/30"
+                            : "bg-slate-100 border border-slate-200 text-slate-600 hover:bg-[#6366f1]/10 hover:text-[#6366f1] hover:border-[#6366f1]/20"
+                        )}
                       >
                         {q}
                       </button>
@@ -279,7 +435,14 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
               )}
 
               {/* Input */}
-              <div className="border-t border-white/[0.08] bg-white/[0.02] px-4 py-3">
+              <div
+                className={cn(
+                  "px-4 py-3",
+                  isDark
+                    ? "border-t border-white/[0.08] bg-white/[0.02]"
+                    : "border-t border-slate-100 bg-white"
+                )}
+              >
                 <div className="flex items-center gap-2">
                   <input
                     ref={inputRef}
@@ -287,8 +450,13 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask about Rohith's portfolio..."
-                    className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder-[#64748b] transition-colors focus:border-[#6366f1]/50 focus:outline-none focus:ring-1 focus:ring-[#6366f1]/30"
+                    placeholder="Ask about the portfolio..."
+                    className={cn(
+                      "flex-1 rounded-xl px-4 py-2.5 text-sm transition-colors focus:outline-none focus:ring-1",
+                      isDark
+                        ? "border border-white/[0.08] bg-white/[0.04] text-white placeholder-slate-500 focus:border-[#6366f1]/50 focus:ring-[#6366f1]/30"
+                        : "border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:border-[#6366f1]/50 focus:ring-[#6366f1]/30 focus:bg-white"
+                    )}
                     disabled={isTyping}
                   />
                   <button
@@ -298,7 +466,9 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
                       "flex h-10 w-10 items-center justify-center rounded-xl transition-all",
                       input.trim() && !isTyping
                         ? "bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] text-white shadow-lg hover:shadow-[0_0_20px_rgba(99,102,241,0.4)]"
-                        : "bg-white/[0.05] text-[#475569] cursor-not-allowed"
+                        : isDark
+                          ? "bg-white/[0.05] text-slate-600 cursor-not-allowed"
+                          : "bg-slate-100 text-slate-400 cursor-not-allowed"
                     )}
                     aria-label="Send message"
                   >

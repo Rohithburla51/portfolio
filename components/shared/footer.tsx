@@ -7,7 +7,7 @@ export function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="relative border-t border-white/[0.06] bg-[#0a1224]">
+    <footer className="relative border-t border-slate-200 bg-slate-50 dark:border-white/[0.06] dark:bg-[#0a1224]">
       <div className="mx-auto max-w-7xl px-4 py-12 md:px-6">
         <div className="grid gap-8 md:grid-cols-3">
           <div>
@@ -24,7 +24,7 @@ export function Footer() {
           </div>
 
           <div>
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white">
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-900 dark:text-white">
               Connect
             </h3>
             <ul className="space-y-2 text-sm text-[var(--color-text-muted)]">
@@ -33,7 +33,7 @@ export function Footer() {
                   href={SITE.socials.github}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 transition-colors hover:text-white"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-900 dark:hover:text-white"
                 >
                   <Github className="h-4 w-4" /> GitHub
                 </a>
@@ -43,7 +43,7 @@ export function Footer() {
                   href={SITE.socials.linkedin}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 transition-colors hover:text-white"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-900 dark:hover:text-white"
                 >
                   <Linkedin className="h-4 w-4" /> LinkedIn
                 </a>
@@ -53,7 +53,7 @@ export function Footer() {
                   href={SITE.socials.leetcode}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 transition-colors hover:text-white"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-900 dark:hover:text-white"
                 >
                   <Code2 className="h-4 w-4" /> LeetCode
                 </a>
@@ -63,7 +63,7 @@ export function Footer() {
                   href={SITE.socials.geeksforgeeks}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 transition-colors hover:text-white"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-900 dark:hover:text-white"
                 >
                   <Trophy className="h-4 w-4" /> GeeksforGeeks
                 </a>
@@ -71,7 +71,7 @@ export function Footer() {
               <li>
                 <a
                   href={SITE.socials.email}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-white"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-900 dark:hover:text-white"
                 >
                   <Mail className="h-4 w-4" /> {SITE.email}
                 </a>
@@ -80,7 +80,7 @@ export function Footer() {
           </div>
 
           <div>
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white">
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-900 dark:text-white">
               Build
             </h3>
             <p className="text-sm text-[var(--color-text-muted)]">
@@ -90,7 +90,7 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] pt-6 text-xs text-[var(--color-text-muted)] md:flex-row">
+        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-slate-200 pt-6 text-xs text-[var(--color-text-muted)] dark:border-white/[0.06] md:flex-row">
           <p>© {year} {SITE.name}. All rights reserved.</p>
           <p>
             Built with <span className="text-[#8b5cf6]">♥</span> in India

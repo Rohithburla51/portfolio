@@ -78,7 +78,7 @@ export function Hero() {
             initial={reduce ? false : { opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium backdrop-blur"
+            className="mb-5 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-medium backdrop-blur dark:border-white/10 dark:bg-white/5"
           >
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -106,7 +106,7 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="mt-6 flex flex-col gap-2"
           >
-            <p className="text-lg font-medium text-white md:text-xl">
+            <p className="text-lg font-medium text-slate-900 dark:text-white md:text-xl">
               {displayTitle}
             </p>
             <p className="font-mono text-sm text-[var(--color-text-muted)] md:text-base">
@@ -144,7 +144,7 @@ export function Hero() {
             </a>
             <a
               href="#contact"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-6 text-sm font-semibold text-white backdrop-blur transition-all hover:border-white/30 hover:bg-white/10"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white/80 px-6 text-sm font-semibold text-slate-800 backdrop-blur transition-all hover:border-slate-300 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:border-white/30 dark:hover:bg-white/10"
             >
               <Mail className="h-4 w-4" />
               Contact Me
@@ -154,7 +154,7 @@ export function Hero() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => trackEvent("github_click", { source: "hero" })}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white backdrop-blur transition-all hover:border-white/30 hover:bg-white/10"
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-700 backdrop-blur transition-all hover:border-slate-300 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:border-white/30 dark:hover:bg-white/10"
               aria-label="GitHub"
             >
               <Github className="h-5 w-5" />
@@ -164,7 +164,7 @@ export function Hero() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => trackEvent("linkedin_click", { source: "hero" })}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white backdrop-blur transition-all hover:border-white/30 hover:bg-white/10"
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-700 backdrop-blur transition-all hover:border-slate-300 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:border-white/30 dark:hover:bg-white/10"
               aria-label="LinkedIn"
             >
               <Linkedin className="h-5 w-5" />
@@ -181,21 +181,21 @@ export function Hero() {
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-[#8b5cf6]" />
               <span>
-                <span className="font-semibold text-white">2</span> Production AI
+                <span className="font-semibold text-slate-900 dark:text-white">2</span> Production AI
                 Projects
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-[#06b6d4]" />
               <span>
-                <span className="font-semibold text-white">95.66%</span> mIoU
+                <span className="font-semibold text-slate-900 dark:text-white">95.66%</span> mIoU
                 (SegFormer-B2)
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-[#6366f1]" />
               <span>
-                <span className="font-semibold text-white">IIT Tirupati</span>{" "}
+                <span className="font-semibold text-slate-900 dark:text-white">IIT Tirupati</span>{" "}
                 Hackathon &lsquo;25
               </span>
             </div>

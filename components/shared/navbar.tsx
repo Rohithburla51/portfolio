@@ -7,6 +7,7 @@ import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SITE } from "@/lib/utils";
 import { createBrowserClient } from "@supabase/ssr";
+import { ThemeToggle } from "./theme-toggle";
 
 const BASE_NAV_LINKS = [
   { href: "#about", label: "About" },
@@ -79,7 +80,7 @@ export function Navbar() {
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-all duration-300",
         scrolled
-          ? "bg-[rgba(15,23,42,0.7)] backdrop-blur-xl border-b border-white/[0.06]"
+          ? "backdrop-blur-xl border-b bg-white/80 border-slate-200/60 dark:bg-[rgba(15,23,42,0.7)] dark:border-white/[0.06]"
           : "bg-transparent",
       )}
     >
@@ -111,8 +112,8 @@ export function Navbar() {
                 className={cn(
                   "relative inline-block px-3 py-2 text-sm font-medium transition-colors",
                   active === l.href
-                    ? "text-white"
-                    : "text-[var(--color-text-muted)] hover:text-white",
+                    ? "text-slate-900 dark:text-white"
+                    : "text-slate-500 hover:text-slate-900 dark:text-[var(--color-text-muted)] dark:hover:text-white",
                 )}
               >
                 {l.label}
@@ -130,9 +131,10 @@ export function Navbar() {
 
         {/* Right CTAs */}
         <div className="hidden items-center gap-2 md:flex">
+          <ThemeToggle />
           <a
             href="#resume"
-            className="inline-flex h-9 items-center justify-center rounded-full border border-white/10 px-4 text-sm font-medium text-white/90 transition-colors hover:border-white/30 hover:bg-white/5"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-white/10 px-4 text-sm font-medium text-white/90 transition-colors hover:border-white/30 hover:bg-white/5 dark:border-white/10 dark:text-white/90 dark:hover:border-white/30 dark:hover:bg-white/5"
           >
             Resume
           </a>
@@ -145,15 +147,18 @@ export function Navbar() {
         </div>
 
         {/* Mobile menu trigger */}
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="grid h-10 w-10 place-items-center rounded-full glass md:hidden"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        <div className="flex items-center gap-2 md:hidden">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="grid h-10 w-10 place-items-center rounded-full glass"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+          >
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </nav>
 
       {/* Mobile drawer */}
@@ -164,7 +169,7 @@ export function Navbar() {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
-            className="overflow-hidden border-t border-white/[0.06] bg-[rgba(15,23,42,0.9)] backdrop-blur-xl md:hidden"
+            className="overflow-hidden border-t border-slate-200/60 bg-white/95 backdrop-blur-xl dark:border-white/[0.06] dark:bg-[rgba(15,23,42,0.9)] md:hidden"
           >
             <ul className="space-y-1 px-4 py-4">
               {navLinks.map((l) => (
@@ -172,7 +177,7 @@ export function Navbar() {
                   <a
                     href={l.href}
                     onClick={() => setOpen(false)}
-                    className="block rounded-lg px-4 py-3 text-base font-medium text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+                    className="block rounded-lg px-4 py-3 text-base font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-white/80 dark:hover:bg-white/5 dark:hover:text-white"
                   >
                     {l.label}
                   </a>
