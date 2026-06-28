@@ -1,11 +1,10 @@
 /**
- * LeetCode live stats via Alfa LeetCode API.
+ * LeetCode live stats via LeetCode's public GraphQL API.
  * Falls back to manual `site_config.leetcode_solved` on failure.
  */
 
 import { createPublicSupabase } from "@/lib/supabase";
 
-const ALFA_API_BASE = process.env.LEETCODE_API_BASE ?? "https://alfa-leetcode-api.onrender.com";
 const LEETCODE_USERNAME = process.env.NEXT_PUBLIC_LEETCODE_USERNAME ?? "ROHITH_PROGRAMMER";
 
 export interface LeetCodeStats {
@@ -30,51 +29,80 @@ const FALLBACK_DEFAULTS: Omit<LeetCodeStats, "source" | "fetchedAt"> = {
   reputation: 0,
 };
 
-interface AlfaUserProfile {
-  username: string;
-  totalSolved?: number;
-  totalSubmissions?: Array<{ difficulty: string; count: number; submissions: number }>;
-  easySolved?: number;
-  mediumSolved?: number;
-  hardSolved?: number;
-  ranking?: number;
-  contributionPoints?: number;
-  reputation?: number;
-}
+const LEETCODE_GRAPHQL_QUERY = `
+  query getUserProfile($username: String!) {
+    matchedUser(username: $username) {
+      submitStats: submitStatsGlobal {
+        acSubmissionNum {
+          difficulty
+          count
+          submissions
+        }
+      }
+      profile {
+        ranking
+        reputation
+        starRating
+      }
+    }
+  }
+`;
 
 /**
- * Fetch live LeetCode stats with timeout and fallback chain.
- * Order: Alfa API -> site_config.leetcode_solved -> hardcoded defaults.
+ * Fetch live LeetCode stats via LeetCode GraphQL API.
+ * Order: LeetCode GraphQL -> Alfa API (backup) -> site_config DB -> hardcoded defaults.
  */
 export async function getLeetCodeStats(): Promise<LeetCodeStats> {
-  // 1. Try live API with a 5s timeout
+  // 1. Try LeetCode's own GraphQL API
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`${ALFA_API_BASE}/userProfile/${LEETCODE_USERNAME}`, {
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch("https://leetcode.com/graphql", {
+      method: "POST",
       signal: controller.signal,
-      headers: { Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Referer": "https://leetcode.com",
+      },
+      body: JSON.stringify({
+        query: LEETCODE_GRAPHQL_QUERY,
+        variables: { username: LEETCODE_USERNAME },
+      }),
       next: { revalidate: 3600, tags: ["leetcode-stats"] },
     });
     clearTimeout(timeout);
+
     if (res.ok) {
-      const data = (await res.json()) as AlfaUserProfile;
-      const submissions = data.totalSubmissions ?? [];
-      const findSub = (d: string) => submissions.find((s) => s.difficulty === d)?.count ?? 0;
-      return {
-        total: data.totalSolved ?? data.easySolved ?? 0,
-        easy: data.easySolved ?? findSub("Easy"),
-        medium: data.mediumSolved ?? findSub("Medium"),
-        hard: data.hardSolved ?? findSub("Hard"),
-        ranking: data.ranking ?? null,
-        contributionPoints: data.contributionPoints ?? 0,
-        reputation: data.reputation ?? 0,
-        source: "live",
-        fetchedAt: new Date().toISOString(),
+      const json = await res.json() as {
+        data?: {
+          matchedUser?: {
+            submitStats?: {
+              acSubmissionNum?: Array<{ difficulty: string; count: number }>;
+            };
+            profile?: { ranking?: number; reputation?: number };
+          };
+        };
       };
+
+      const user = json.data?.matchedUser;
+      if (user) {
+        const subs = user.submitStats?.acSubmissionNum ?? [];
+        const find = (d: string) => subs.find((s) => s.difficulty === d)?.count ?? 0;
+        return {
+          total: find("All"),
+          easy: find("Easy"),
+          medium: find("Medium"),
+          hard: find("Hard"),
+          ranking: user.profile?.ranking ?? null,
+          contributionPoints: 0,
+          reputation: user.profile?.reputation ?? 0,
+          source: "live",
+          fetchedAt: new Date().toISOString(),
+        };
+      }
     }
   } catch (error) {
-    console.warn("[leetcode] live fetch failed, falling back:", error);
+    console.warn("[leetcode] GraphQL fetch failed:", error);
   }
 
   // 2. Fallback to site_config.leetcode_solved (DB)
