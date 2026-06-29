@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   User,
-  FolderOpen,
   Award,
   Trophy,
   FileText,
@@ -16,7 +15,6 @@ import {
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/profile", label: "Profile", icon: User },
-  { href: "/admin/projects", label: "Projects", icon: FolderOpen },
   { href: "/admin/experiences", label: "Experience", icon: Briefcase },
   { href: "/admin/certificates", label: "Certificates", icon: Award },
   { href: "/admin/achievements", label: "Achievements", icon: Trophy },

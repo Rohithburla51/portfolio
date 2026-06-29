@@ -1,7 +1,6 @@
 import { createAdminClient } from "@/lib/supabase";
 import {
   LayoutDashboard,
-  FolderOpen,
   Award,
   Trophy,
   FileText,
@@ -9,21 +8,20 @@ import {
   TrendingUp,
   Eye,
   Briefcase,
+  Github,
 } from "lucide-react";
 import Link from "next/link";
 
 async function getStats() {
   const supabase = await createAdminClient();
-  if (!supabase) return { projects: 0, certificates: 0, achievements: 0, posts: 0, experiences: 0 };
+  if (!supabase) return { certificates: 0, achievements: 0, posts: 0, experiences: 0 };
 
   const [
-    { count: projects },
     { count: certificates },
     { count: achievements },
     { count: posts },
     { count: experiences },
   ] = await Promise.all([
-    supabase.from("featured_projects").select("*", { count: "exact", head: true }),
     supabase.from("certificates").select("*", { count: "exact", head: true }),
     supabase.from("achievements").select("*", { count: "exact", head: true }),
     supabase.from("posts").select("*", { count: "exact", head: true }),
@@ -31,7 +29,6 @@ async function getStats() {
   ]);
 
   return {
-    projects: projects ?? 0,
     certificates: certificates ?? 0,
     achievements: achievements ?? 0,
     posts: posts ?? 0,
@@ -53,7 +50,6 @@ async function getRecentPosts() {
 }
 
 const STAT_CARDS = [
-  { label: "Total Projects", key: "projects" as const, icon: FolderOpen, color: "from-blue-500 to-cyan-500" },
   { label: "Certificates", key: "certificates" as const, icon: Award, color: "from-purple-500 to-pink-500" },
   { label: "Achievements", key: "achievements" as const, icon: Trophy, color: "from-amber-500 to-orange-500" },
   { label: "Blog Posts", key: "posts" as const, icon: FileText, color: "from-green-500 to-emerald-500" },
@@ -68,8 +64,6 @@ export const metadata = {
 export default async function AdminDashboardPage() {
   const [stats, recentPosts] = await Promise.all([getStats(), getRecentPosts()]);
 
-  const totalItems = stats.projects + stats.certificates + stats.achievements;
-
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -81,7 +75,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {STAT_CARDS.map((card) => {
           const Icon = card.icon;
           const value = stats[card.key];
@@ -116,18 +110,18 @@ export default async function AdminDashboardPage() {
           </h2>
           <div className="mt-5 grid grid-cols-2 gap-3">
             <Link
-              href="/admin/projects"
+              href="/admin/experiences"
               className="flex flex-col items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] p-4 text-center transition-all hover:border-[#6366f1]/50 hover:bg-[#6366f1]/5"
             >
-              <FolderOpen className="h-6 w-6 text-[#6366f1]" />
-              <span className="text-sm font-medium text-white">Manage Projects</span>
+              <Briefcase className="h-6 w-6 text-[#6366f1]" />
+              <span className="text-sm font-medium text-white">Add Experience</span>
             </Link>
             <Link
               href="/admin/experiences"
               className="flex flex-col items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] p-4 text-center transition-all hover:border-[#8b5cf6]/50 hover:bg-[#8b5cf6]/5"
             >
-              <Briefcase className="h-6 w-6 text-[#8b5cf6]" />
-              <span className="text-sm font-medium text-white">Add Experience</span>
+              <Github className="h-6 w-6 text-[#8b5cf6]" />
+              <span className="text-sm font-medium text-white">GitHub Auto-sync</span>
             </Link>
             <Link
               href="/admin/posts"
@@ -220,32 +214,28 @@ export default async function AdminDashboardPage() {
           <div className="flex-1">
             <div className="h-3 overflow-hidden rounded-full bg-white/[0.05]">
               <div className="flex h-full">
-                {stats.projects > 0 && (
-                  <div
-                    className="bg-gradient-to-r from-blue-500 to-cyan-500"
-                    style={{ width: `${totalItems > 0 ? (stats.projects / totalItems) * 100 : 0}%` }}
-                  />
-                )}
                 {stats.certificates > 0 && (
                   <div
                     className="bg-gradient-to-r from-purple-500 to-pink-500"
-                    style={{ width: `${totalItems > 0 ? (stats.certificates / totalItems) * 100 : 0}%` }}
+                    style={{ width: `${(stats.certificates / (stats.certificates + stats.achievements + stats.experiences)) * 100}%` }}
                   />
                 )}
                 {stats.achievements > 0 && (
                   <div
                     className="bg-gradient-to-r from-amber-500 to-orange-500"
-                    style={{ width: `${totalItems > 0 ? (stats.achievements / totalItems) * 100 : 0}%` }}
+                    style={{ width: `${(stats.achievements / (stats.certificates + stats.achievements + stats.experiences)) * 100}%` }}
+                  />
+                )}
+                {stats.experiences > 0 && (
+                  <div
+                    className="bg-gradient-to-r from-indigo-500 to-violet-500"
+                    style={{ width: `${(stats.experiences / (stats.certificates + stats.achievements + stats.experiences)) * 100}%` }}
                   />
                 )}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-4 text-xs text-[var(--color-text-muted)]">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500" />
-              Projects ({stats.projects})
-            </span>
+          <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--color-text-muted)]">
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
               Certificates ({stats.certificates})
@@ -254,8 +244,16 @@ export default async function AdminDashboardPage() {
               <span className="h-2 w-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500" />
               Achievements ({stats.achievements})
             </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500" />
+              Experience ({stats.experiences})
+            </span>
           </div>
         </div>
+        <p className="mt-4 text-xs text-[var(--color-text-muted)]">
+          <Github className="inline h-3.5 w-3.5 mr-1" />
+          Projects are auto-synced from GitHub — no manual management needed.
+        </p>
       </div>
     </div>
   );
