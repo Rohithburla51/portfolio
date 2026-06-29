@@ -8,26 +8,34 @@ import {
   Clock,
   TrendingUp,
   Eye,
+  Briefcase,
 } from "lucide-react";
 import Link from "next/link";
 
 async function getStats() {
   const supabase = await createAdminClient();
-  if (!supabase) return { projects: 0, certificates: 0, achievements: 0, posts: 0 };
+  if (!supabase) return { projects: 0, certificates: 0, achievements: 0, posts: 0, experiences: 0 };
 
-  const [{ count: projects }, { count: certificates }, { count: achievements }, { count: posts }] =
-    await Promise.all([
-      supabase.from("featured_projects").select("*", { count: "exact", head: true }),
-      supabase.from("certificates").select("*", { count: "exact", head: true }),
-      supabase.from("achievements").select("*", { count: "exact", head: true }),
-      supabase.from("posts").select("*", { count: "exact", head: true }),
-    ]);
+  const [
+    { count: projects },
+    { count: certificates },
+    { count: achievements },
+    { count: posts },
+    { count: experiences },
+  ] = await Promise.all([
+    supabase.from("featured_projects").select("*", { count: "exact", head: true }),
+    supabase.from("certificates").select("*", { count: "exact", head: true }),
+    supabase.from("achievements").select("*", { count: "exact", head: true }),
+    supabase.from("posts").select("*", { count: "exact", head: true }),
+    supabase.from("experiences").select("*", { count: "exact", head: true }),
+  ]);
 
   return {
     projects: projects ?? 0,
     certificates: certificates ?? 0,
     achievements: achievements ?? 0,
     posts: posts ?? 0,
+    experiences: experiences ?? 0,
   };
 }
 
@@ -49,6 +57,7 @@ const STAT_CARDS = [
   { label: "Certificates", key: "certificates" as const, icon: Award, color: "from-purple-500 to-pink-500" },
   { label: "Achievements", key: "achievements" as const, icon: Trophy, color: "from-amber-500 to-orange-500" },
   { label: "Blog Posts", key: "posts" as const, icon: FileText, color: "from-green-500 to-emerald-500" },
+  { label: "Experience", key: "experiences" as const, icon: Briefcase, color: "from-indigo-500 to-violet-500" },
 ];
 
 export const metadata = {
@@ -72,7 +81,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {STAT_CARDS.map((card) => {
           const Icon = card.icon;
           const value = stats[card.key];
@@ -112,6 +121,13 @@ export default async function AdminDashboardPage() {
             >
               <FolderOpen className="h-6 w-6 text-[#6366f1]" />
               <span className="text-sm font-medium text-white">Manage Projects</span>
+            </Link>
+            <Link
+              href="/admin/experiences"
+              className="flex flex-col items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] p-4 text-center transition-all hover:border-[#8b5cf6]/50 hover:bg-[#8b5cf6]/5"
+            >
+              <Briefcase className="h-6 w-6 text-[#8b5cf6]" />
+              <span className="text-sm font-medium text-white">Add Experience</span>
             </Link>
             <Link
               href="/admin/posts"
