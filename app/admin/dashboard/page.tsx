@@ -1,6 +1,5 @@
 import { createAdminClient } from "@/lib/supabase";
 import {
-  LayoutDashboard,
   Award,
   Trophy,
   FileText,
@@ -9,26 +8,30 @@ import {
   Eye,
   Briefcase,
   Github,
+  FolderOpen,
 } from "lucide-react";
 import Link from "next/link";
 
 async function getStats() {
   const supabase = await createAdminClient();
-  if (!supabase) return { certificates: 0, achievements: 0, posts: 0, experiences: 0 };
+  if (!supabase) return { projects: 0, certificates: 0, achievements: 0, posts: 0, experiences: 0 };
 
   const [
     { count: certificates },
     { count: achievements },
     { count: posts },
     { count: experiences },
+    { count: projects },
   ] = await Promise.all([
     supabase.from("certificates").select("*", { count: "exact", head: true }),
     supabase.from("achievements").select("*", { count: "exact", head: true }),
     supabase.from("posts").select("*", { count: "exact", head: true }),
     supabase.from("experiences").select("*", { count: "exact", head: true }),
+    supabase.from("github_projects").select("*", { count: "exact", head: true }).eq("is_hidden", false),
   ]);
 
   return {
+    projects: projects ?? 0,
     certificates: certificates ?? 0,
     achievements: achievements ?? 0,
     posts: posts ?? 0,
@@ -50,10 +53,10 @@ async function getRecentPosts() {
 }
 
 const STAT_CARDS = [
+  { label: "GitHub Repos", key: "projects" as const, icon: FolderOpen, color: "from-blue-500 to-cyan-500" },
   { label: "Certificates", key: "certificates" as const, icon: Award, color: "from-purple-500 to-pink-500" },
   { label: "Achievements", key: "achievements" as const, icon: Trophy, color: "from-amber-500 to-orange-500" },
   { label: "Blog Posts", key: "posts" as const, icon: FileText, color: "from-green-500 to-emerald-500" },
-  { label: "Experience", key: "experiences" as const, icon: Briefcase, color: "from-indigo-500 to-violet-500" },
 ];
 
 export const metadata = {
@@ -110,18 +113,11 @@ export default async function AdminDashboardPage() {
           </h2>
           <div className="mt-5 grid grid-cols-2 gap-3">
             <Link
-              href="/admin/experiences"
+              href="/admin/projects"
               className="flex flex-col items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] p-4 text-center transition-all hover:border-[#6366f1]/50 hover:bg-[#6366f1]/5"
             >
-              <Briefcase className="h-6 w-6 text-[#6366f1]" />
-              <span className="text-sm font-medium text-white">Add Experience</span>
-            </Link>
-            <Link
-              href="/admin/experiences"
-              className="flex flex-col items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] p-4 text-center transition-all hover:border-[#8b5cf6]/50 hover:bg-[#8b5cf6]/5"
-            >
-              <Github className="h-6 w-6 text-[#8b5cf6]" />
-              <span className="text-sm font-medium text-white">GitHub Auto-sync</span>
+              <FolderOpen className="h-6 w-6 text-[#6366f1]" />
+              <span className="text-sm font-medium text-white">Manage Projects</span>
             </Link>
             <Link
               href="/admin/posts"

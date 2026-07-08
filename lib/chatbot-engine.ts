@@ -2,6 +2,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import type {
   Achievement,
   Certificate,
+  ChatMessage,
   Experience,
   FeaturedProject,
   Post,
@@ -209,7 +210,277 @@ function formatList(items: string[], limit?: number): string {
   return list.slice(0, -1).join(", ") + ", and " + (list[list.length - 1] ?? "");
 }
 
-function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string {
+/* ------------------------------------------------------------------ */
+/* Conversation context + follow-up resolution                        */
+/* ------------------------------------------------------------------ */
+
+interface ContextEntity {
+  type: "Project" | "Certificate" | "Achievement" | "Experience" | "Blog Post";
+  title: string;
+  payload: FeaturedProject | Certificate | Achievement | Experience | Post;
+  score: number;
+}
+
+interface ConversationContext {
+  lastIntent: Intent | null;
+  entities: ContextEntity[];
+}
+
+/** Score every portfolio document against the query, returning payloads. */
+function scoreAllDocuments(
+  query: string,
+  kb: KnowledgeBase
+): ContextEntity[] {
+  const out: ContextEntity[] = [];
+
+  kb.projects.forEach((p) => {
+    const s = computeRelevance(query, p.title, p.tagline, p.long_description, p.technologies);
+    if (s > 0.15)
+      out.push({ type: "Project", title: p.title, payload: p, score: s });
+  });
+  kb.certificates.forEach((c) => {
+    const s = computeRelevance(query, c.name, c.organization, c.category);
+    if (s > 0.15)
+      out.push({ type: "Certificate", title: c.name, payload: c, score: s });
+  });
+  kb.achievements.forEach((a) => {
+    const s = computeRelevance(query, a.title, a.description, a.category);
+    if (s > 0.15)
+      out.push({ type: "Achievement", title: a.title, payload: a, score: s });
+  });
+  kb.experiences.forEach((e) => {
+    const s = computeRelevance(query, e.role, e.company, e.description, e.technologies);
+    if (s > 0.15)
+      out.push({ type: "Experience", title: `${e.role} at ${e.company}`, payload: e, score: s });
+  });
+  kb.posts.forEach((p) => {
+    const s = computeRelevance(query, p.title, p.excerpt, p.tags);
+    if (s > 0.15)
+      out.push({ type: "Blog Post", title: p.title, payload: p, score: s });
+  });
+
+  return out.sort((a, b) => b.score - a.score);
+}
+
+/** The entities that a given intent would have surfaced, so follow-ups can reference them. */
+function getEntitiesForIntent(
+  intent: Intent,
+  query: string,
+  kb: KnowledgeBase
+): ContextEntity[] {
+  switch (intent) {
+    case "projects":
+      return kb.projects.map((p) => ({ type: "Project", title: p.title, payload: p, score: 1 }));
+    case "project_detail":
+      return kb.projects
+        .map((p) => ({
+          p,
+          score: computeRelevance(query, p.title, p.tagline, p.long_description, p.technologies),
+        }))
+        .filter((m) => m.score > 0.15)
+        .sort((a, b) => b.score - a.score)
+        .map((m) => ({ type: "Project", title: m.p.title, payload: m.p, score: m.score }));
+    case "certificates":
+      return kb.certificates.map((c) => ({ type: "Certificate", title: c.name, payload: c, score: 1 }));
+    case "achievements":
+      return kb.achievements.map((a) => ({ type: "Achievement", title: a.title, payload: a, score: 1 }));
+    case "experience":
+      return kb.experiences.map((e) => ({
+        type: "Experience",
+        title: `${e.role} at ${e.company}`,
+        payload: e,
+        score: 1,
+      }));
+    case "blog":
+      return kb.posts.map((p) => ({ type: "Blog Post", title: p.title, payload: p, score: 1 }));
+    case "general":
+      return scoreAllDocuments(query, kb);
+    default:
+      return [];
+  }
+}
+
+/** Reconstruct context from the conversation history (previous user turn). */
+function buildContext(history: ChatMessage[], kb: KnowledgeBase): ConversationContext {
+  const userMsgs = (history ?? []).filter((m) => m.role === "user");
+  if (userMsgs.length === 0) return { lastIntent: null, entities: [] };
+  const prevQuery = userMsgs[userMsgs.length - 1]!.content;
+  const intent = detectIntent(prevQuery);
+  return { lastIntent: intent, entities: getEntitiesForIntent(intent, prevQuery, kb) };
+}
+
+/** Does the query look like a follow-up to the previous turn? */
+function isFollowUpQuery(query: string, context: ConversationContext): boolean {
+  if (context.entities.length === 0) return false;
+  const q = query.toLowerCase().trim();
+  if (/^(more|details?|explain|elaborate|tell me more|what about|and the|can you elaborate|sure|ok|yes|show me)\b/i.test(q))
+    return true;
+  if (/\b(tell me more|more about|the (first|second|third|fourth|fifth|last|first one|second one|third one)|that (one|project|cert|certificate|achievement|experience|post)|this one|it|the one)\b/i.test(q))
+    return true;
+  return false;
+}
+
+/** Resolve which entity a follow-up refers to. */
+function resolveReferencedEntity(
+  query: string,
+  entities: ContextEntity[],
+  kb: KnowledgeBase
+): ContextEntity | null {
+  const q = query.toLowerCase();
+
+  // 1. Direct title/name mention
+  for (const e of entities) {
+    if (e.title && q.includes(e.title.toLowerCase())) return e;
+  }
+  // Fallback: search the whole knowledge base by name
+  const direct = findDirectEntity(query, kb);
+  if (direct) return direct;
+
+  // 2. Ordinal words
+  const ordinals: Record<string, number> = {
+    first: 0, second: 1, third: 2, fourth: 3, fifth: 4, "1st": 0, "2nd": 1, "3rd": 2, "4th": 3, last: entities.length - 1,
+  };
+  for (const [word, idx] of Object.entries(ordinals)) {
+    if (q.includes(word) && idx >= 0 && idx < entities.length) return entities[idx]!;
+  }
+
+  // 3. Numeric index ("project 2")
+  const numMatch = q.match(/\b(\d+)\b/);
+  if (numMatch) {
+    const n = parseInt(numMatch[1]!, 10) - 1;
+    if (n >= 0 && n < entities.length) return entities[n]!;
+  }
+
+  // 4. Demonstratives ("that", "this", "it") → most recent entity
+  if (/\b(that|this|it|the one|one)\b/.test(q)) return entities[entities.length - 1] ?? null;
+
+  // 5. Default → top/most relevant entity
+  return entities[0] ?? null;
+}
+
+/** Search all documents by name mention regardless of prior context. */
+function findDirectEntity(query: string, kb: KnowledgeBase): ContextEntity | null {
+  const q = query.toLowerCase();
+  const search = <T,>(
+    items: T[],
+    type: ContextEntity["type"],
+    nameOf: (item: T) => string
+  ): ContextEntity | null => {
+    for (const item of items) {
+      const title = nameOf(item).toLowerCase();
+      if (title && q.includes(title)) return { type, title, payload: item as never, score: 1 };
+    }
+    return null;
+  };
+  return (
+    search(kb.projects, "Project", (p) => p.title) ??
+    search(kb.certificates, "Certificate", (c) => c.name) ??
+    search(kb.achievements, "Achievement", (a) => a.title) ??
+    search(kb.posts, "Blog Post", (p) => p.title) ??
+    null
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Detailed renderers (reused by intents AND follow-ups)               */
+/* ------------------------------------------------------------------ */
+
+function renderProjectDetail(p: FeaturedProject): string {
+  const parts: string[] = [];
+  parts.push(`### ${p.title}`);
+  if (p.tagline) parts.push(`*${p.tagline}*`);
+  parts.push("");
+  if (p.long_description) {
+    parts.push(p.long_description);
+    parts.push("");
+  }
+  if (p.technologies?.length) {
+    parts.push(`**Tech Stack:** ${formatList(p.technologies)}`);
+  }
+  if (p.highlights?.length) {
+    parts.push(`**Key Highlights:**`);
+    for (const h of p.highlights.slice(0, 5)) {
+      parts.push(`• ${h}`);
+    }
+  }
+  const links: string[] = [];
+  if (p.github_url) links.push(`[GitHub](${p.github_url})`);
+  if (p.live_url) links.push(`[Live Demo](${p.live_url})`);
+  if (links.length > 0) parts.push(`\n🔗 ${links.join(" | ")}`);
+  return parts.join("\n").trim();
+}
+
+function renderCertificateDetail(c: Certificate): string {
+  const parts: string[] = [];
+  parts.push(`### ${c.name}`);
+  parts.push(`_${c.organization}_`);
+  if (c.category) parts.push(`**Category:** ${c.category}`);
+  if (c.issue_date) parts.push(`**Issued:** ${c.issue_date}`);
+  const links: string[] = [];
+  if (c.verify_url) links.push(`[Verify](${c.verify_url})`);
+  if (c.pdf_url) links.push(`[Certificate PDF](${c.pdf_url})`);
+  if (links.length > 0) parts.push(`\n🔗 ${links.join(" | ")}`);
+  return parts.join("\n").trim();
+}
+
+function renderAchievementDetail(a: Achievement): string {
+  const icon =
+    a.category === "hackathon" ? "🏆"
+    : a.category === "coding" ? "💻"
+    : a.category === "academic" ? "🎓"
+    : "⭐";
+  const parts: string[] = [];
+  parts.push(`${icon} **${a.title}**`);
+  if (a.description) parts.push(a.description);
+  if (a.date) parts.push(`📅 ${a.date}`);
+  if (a.link) parts.push(`🔗 [More](${a.link})`);
+  return parts.join("\n").trim();
+}
+
+function renderExperienceDetail(e: Experience): string {
+  const parts: string[] = [];
+  parts.push(`### ${e.role} at ${e.company}`);
+  parts.push(`📅 ${e.duration}`);
+  if (e.description) parts.push(`\n${e.description}`);
+  if (e.technologies?.length) parts.push(`\n**Technologies:** ${formatList(e.technologies)}`);
+  return parts.join("\n").trim();
+}
+
+function renderBlogDetail(p: Post): string {
+  const parts: string[] = [];
+  parts.push(`### ${p.title}`);
+  if (p.tags?.length) parts.push(`_${p.tags.slice(0, 3).join(", ")}_`);
+  if (p.excerpt) parts.push(`\n${p.excerpt}`);
+  if (p.reading_time_min) parts.push(`⏱️ ~${p.reading_time_min} min read`);
+  return parts.join("\n").trim();
+}
+
+function renderEntityDetail(entity: ContextEntity): string {
+  switch (entity.type) {
+    case "Project":
+      return renderProjectDetail(entity.payload as FeaturedProject);
+    case "Certificate":
+      return renderCertificateDetail(entity.payload as Certificate);
+    case "Achievement":
+      return renderAchievementDetail(entity.payload as Achievement);
+    case "Experience":
+      return renderExperienceDetail(entity.payload as Experience);
+    case "Blog Post":
+      return renderBlogDetail(entity.payload as Post);
+  }
+}
+
+function handleFollowUp(query: string, context: ConversationContext, kb: KnowledgeBase): string {
+  const entity = resolveReferencedEntity(query, context.entities, kb);
+  if (!entity) {
+    // Couldn't resolve a reference — fall back to a normal general answer.
+    return buildResponse("general", query, kb, context);
+  }
+  const intro = `Here's more on **${entity.title}**:\n`;
+  return intro + renderEntityDetail(entity);
+}
+
+function buildResponse(intent: Intent, query: string, kb: KnowledgeBase, context: ConversationContext = { lastIntent: null, entities: [] }): string {
   const profile = kb.profile;
   const name = profile?.name ?? "Rohith";
 
@@ -225,7 +496,7 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
 
     case "thanks": {
       const responses = [
-        "You're welcome! Let me know if there's anything else you'd like to know about Rohith's work.",
+        `You're welcome! Let me know if there's anything else you'd like to know about ${name}'s work.`,
         "Happy to help! Feel free to ask if you have more questions.",
         "Glad I could help! Don't hesitate to ask anything else about the portfolio.",
       ];
@@ -299,29 +570,7 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
 
       const parts: string[] = [];
       for (const { project: p } of matched.slice(0, 2)) {
-        parts.push(`### ${p.title}`);
-        if (p.tagline) parts.push(`*${p.tagline}*`);
-        parts.push("");
-        if (p.long_description) {
-          const desc = p.long_description.length > 400
-            ? p.long_description.slice(0, 400) + "..."
-            : p.long_description;
-          parts.push(desc);
-          parts.push("");
-        }
-        if (p.technologies?.length) {
-          parts.push(`**Tech Stack:** ${formatList(p.technologies)}`);
-        }
-        if (p.highlights?.length) {
-          parts.push(`**Key Highlights:**`);
-          for (const h of p.highlights.slice(0, 4)) {
-            parts.push(`• ${h}`);
-          }
-        }
-        const links: string[] = [];
-        if (p.github_url) links.push(`[GitHub](${p.github_url})`);
-        if (p.live_url) links.push(`[Live Demo](${p.live_url})`);
-        if (links.length > 0) parts.push(`\n🔗 ${links.join(" | ")}`);
+        parts.push(renderProjectDetail(p));
         parts.push("");
       }
       return parts.join("\n").trim();
@@ -388,6 +637,7 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
         }
         parts.push("");
       }
+      parts.push("Want the full detail on any certificate? Just ask, e.g. \"Tell me about <certificate name>\".");
       return parts.join("\n").trim();
     }
 
@@ -403,6 +653,8 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
         const icon = a.category === "hackathon" ? "🏆" : a.category === "coding" ? "💻" : a.category === "academic" ? "🎓" : "⭐";
         parts.push(`${icon} **${a.title}**${desc}`);
       }
+      parts.push("");
+      parts.push("Ask me about any of these for the full story!");
       return parts.join("\n");
     }
 
@@ -412,23 +664,25 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
 
       const parts: string[] = [`**${name}'s Professional Experience:**\n`];
       for (const e of kb.experiences) {
-        parts.push(`### ${e.role} at ${e.company}`);
-        parts.push(`📅 ${e.duration}`);
-        if (e.description) parts.push(`\n${e.description.slice(0, 300)}${e.description.length > 300 ? "..." : ""}`);
-        if (e.technologies?.length) parts.push(`\n**Technologies:** ${formatList(e.technologies)}`);
+        parts.push(renderExperienceDetail(e));
         parts.push("");
       }
+      parts.push("Want more detail on a specific role? Just ask!");
       return parts.join("\n").trim();
     }
 
     case "education": {
       const parts: string[] = [];
       parts.push(`**Education:**\n`);
-      parts.push(`🎓 **B.Tech in CSE (AI & ML)**`);
-      parts.push(`CMR College of Engineering and Technology`);
-      parts.push(`Expected Graduation: 2027`);
-      parts.push("");
-      parts.push(`${name} is consistently in the top 10% of his cohort, with a strong focus on Machine Learning, Deep Learning, and practical AI applications.`);
+      if (profile?.about_me && /study|university|college|degree|b\.?tech|bachelor/i.test(profile.about_me)) {
+        parts.push(profile.about_me);
+      } else {
+        parts.push(`🎓 **B.Tech in CSE (AI & ML)**`);
+        parts.push(`CMR College of Engineering and Technology`);
+        parts.push(`Expected Graduation: 2027`);
+        parts.push("");
+        parts.push(`${name} is consistently in the top 10% of his cohort, with a strong focus on Machine Learning, Deep Learning, and practical AI applications.`);
+      }
       return parts.join("\n");
     }
 
@@ -473,9 +727,7 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
 
       const parts: string[] = [`${name} has published **${kb.posts.length}** articles:\n`];
       for (const p of kb.posts.slice(0, 5)) {
-        const tags = p.tags?.length ? ` [${p.tags.slice(0, 3).join(", ")}]` : "";
-        parts.push(`📝 **${p.title}**${tags}`);
-        if (p.excerpt) parts.push(`   ${p.excerpt.slice(0, 100)}${p.excerpt.length > 100 ? "..." : ""}`);
+        parts.push(renderBlogDetail(p));
         parts.push("");
       }
       if (kb.posts.length > 5) {
@@ -487,62 +739,23 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
     case "general":
     default: {
       // Score all documents and find best matches
-      const scores: { type: string; title: string; detail: string; score: number }[] = [];
+      const scores = scoreAllDocuments(query, kb).slice(0, 4);
 
-      kb.projects.forEach((p) => {
-        const s = computeRelevance(query, p.title, p.tagline, p.long_description, p.technologies);
-        if (s > 0.15) scores.push({
-          type: "Project",
-          title: p.title,
-          detail: p.tagline ?? "",
-          score: s,
-        });
-      });
-      kb.certificates.forEach((c) => {
-        const s = computeRelevance(query, c.name, c.organization, c.category);
-        if (s > 0.15) scores.push({
-          type: "Certificate",
-          title: c.name,
-          detail: c.organization,
-          score: s,
-        });
-      });
-      kb.achievements.forEach((a) => {
-        const s = computeRelevance(query, a.title, a.description, a.category);
-        if (s > 0.15) scores.push({
-          type: "Achievement",
-          title: a.title,
-          detail: a.description?.slice(0, 80) ?? "",
-          score: s,
-        });
-      });
-      kb.experiences.forEach((e) => {
-        const s = computeRelevance(query, e.role, e.company, e.description, e.technologies);
-        if (s > 0.15) scores.push({
-          type: "Experience",
-          title: `${e.role} at ${e.company}`,
-          detail: e.duration,
-          score: s,
-        });
-      });
-      kb.posts.forEach((p) => {
-        const s = computeRelevance(query, p.title, p.excerpt, p.tags);
-        if (s > 0.15) scores.push({
-          type: "Blog Post",
-          title: p.title,
-          detail: p.excerpt?.slice(0, 80) ?? "",
-          score: s,
-        });
-      });
-
-      scores.sort((a, b) => b.score - a.score);
-      const top = scores.slice(0, 4);
-
-      if (top.length > 0) {
+      if (scores.length > 0) {
         const parts: string[] = ["Here's what I found relevant in the portfolio:\n"];
-        for (const match of top) {
+        for (const match of scores) {
           parts.push(`**${match.type}:** ${match.title}`);
-          if (match.detail) parts.push(`_${match.detail}_`);
+          const detail =
+            match.type === "Project"
+              ? (match.payload as FeaturedProject).tagline
+              : match.type === "Certificate"
+              ? (match.payload as Certificate).organization
+              : match.type === "Achievement"
+              ? (match.payload as Achievement).description?.slice(0, 80)
+              : match.type === "Experience"
+              ? (match.payload as Experience).duration
+              : (match.payload as Post).excerpt?.slice(0, 80) ?? "";
+          if (detail) parts.push(`_${detail}_`);
           parts.push("");
         }
         parts.push("Would you like more details on any of these?");
@@ -551,7 +764,7 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
 
       return `I appreciate your question! While I don't have a specific answer for that, here's what I can help you with:
 
-• **About Rohith** — his background, education, and interests
+• **About ${name}** — his background, education, and interests
 • **Projects** — the applications and systems he's built
 • **Skills** — his technical expertise and tech stack
 • **Certifications** — professional credentials
@@ -559,7 +772,7 @@ function buildResponse(intent: Intent, query: string, kb: KnowledgeBase): string
 • **Experience** — professional and internship work
 • **Contact** — how to reach him or collaborate
 
-Try asking something like "What projects has Rohith built?" or "Tell me about his achievements."`;
+Try asking something like "What projects has ${name} built?" or "Tell me about his achievements."`;
     }
   }
 }
@@ -568,7 +781,10 @@ Try asking something like "What projects has Rohith built?" or "Tell me about hi
 /* Public: generate a response                                       */
 /* ------------------------------------------------------------------ */
 
-export async function generateResponse(query: string): Promise<string> {
+export async function generateResponse(
+  query: string,
+  history: ChatMessage[] = []
+): Promise<string> {
   try {
     // Basic input validation
     const trimmed = query.trim();
@@ -576,12 +792,19 @@ export async function generateResponse(query: string): Promise<string> {
       return "Please type a question and I'll do my best to help!";
     }
     if (trimmed.length > 500) {
-      return "That's quite a long message! Could you try asking a more specific question? I work best with focused queries about Rohith's portfolio.";
+      return "That's quite a long message! Could you try asking a more specific question? I work best with focused queries about the portfolio.";
     }
 
     const kb = await loadKnowledgeBase();
+    const context = buildContext(history, kb);
     const intent = detectIntent(trimmed);
-    return buildResponse(intent, trimmed, kb);
+
+    // Handle conversational follow-ups ("tell me more", "the first one", "that project")
+    if (isFollowUpQuery(trimmed, context)) {
+      return handleFollowUp(trimmed, context, kb);
+    }
+
+    return buildResponse(intent, trimmed, kb, context);
   } catch (e) {
     console.error("[chatbot] generateResponse failed:", e);
     return "I'm having trouble accessing the portfolio data right now. Please try again in a moment.";

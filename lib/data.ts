@@ -197,7 +197,30 @@ export async function getSiteConfig<T = Record<string, unknown>>(
   }
 }
 
-/* -------------------------- Chatbot settings ----------------------- */
+/* ----------------------- GitHub Project enrichments --------------- */
+export const getGithubProjectEnrichments = cache(
+  async (): Promise<Record<string, import("@/lib/types").GithubProjectEnrichment>> => {
+    try {
+      const supabase = createPublicSupabase();
+      if (!supabase) return {};
+      const { data, error } = await supabase
+        .from("github_projects")
+        .select("*")
+        .eq("is_hidden", false);
+      if (error) throw error;
+      const map: Record<string, import("@/lib/types").GithubProjectEnrichment> = {};
+      for (const row of data ?? []) {
+        map[row.repo_name] = row as import("@/lib/types").GithubProjectEnrichment;
+      }
+      return map;
+    } catch (e) {
+      console.error("[data] getGithubProjectEnrichments failed:", e);
+      return {};
+    }
+  },
+  ["github-projects-enrichments"],
+  { revalidate: 600, tags: ["github-projects-enrichments"] },
+);
 export const getChatbotSettings = cache(
   async (): Promise<ChatbotSettings | null> => {
     try {

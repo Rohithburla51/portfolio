@@ -6,6 +6,8 @@ import { TrackableLink } from "@/components/ui/trackable-link";
 import { ReadmeModal } from "@/components/sections/readme-modal";
 import { SeeMoreGrid } from "@/components/ui/see-more-grid";
 import { getGithubRepos, type GithubRepo } from "@/lib/github";
+import { getGithubProjectEnrichments } from "@/lib/data";
+import type { GithubProjectEnrichment } from "@/lib/types";
 import { SITE, timeAgo } from "@/lib/utils";
 
 const VISIBLE_COUNT = 6;
@@ -27,7 +29,13 @@ const LANGUAGE_COLORS: Record<string, string> = {
 };
 
 export async function GithubProjects() {
-  const repos = await getGithubRepos(SITE.githubUsername);
+  const [repos, enrichments] = await Promise.all([
+    getGithubRepos(SITE.githubUsername),
+    getGithubProjectEnrichments(),
+  ]);
+
+  // Filter out hidden repos
+  const visibleRepos = repos.filter((r) => !enrichments[r.name]?.is_hidden);
 
   return (
     <section
@@ -43,7 +51,7 @@ export async function GithubProjects() {
           description={`Auto-synced from github.com/${SITE.githubUsername} — every new public repo appears here automatically.`}
         />
 
-        {repos.length === 0 ? (
+        {visibleRepos.length === 0 ? (
           <GlassCard className="mt-12 p-12 text-center" hover={false}>
             <Github className="mx-auto h-10 w-10 text-[var(--color-text-muted)]" />
             <p className="mt-4 text-sm text-[var(--color-text-muted)]">
@@ -53,8 +61,8 @@ export async function GithubProjects() {
         ) : (
           <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <SeeMoreGrid visibleCount={VISIBLE_COUNT}>
-              {repos.map((r) => (
-                <RepoCard key={r.id} repo={r} />
+              {visibleRepos.map((r) => (
+                <RepoCard key={r.id} repo={r} enrichment={enrichments[r.name] ?? null} />
               ))}
             </SeeMoreGrid>
           </div>
@@ -76,8 +84,24 @@ export async function GithubProjects() {
   );
 }
 
-function RepoCard({ repo }: { repo: GithubRepo }) {
+function RepoCard({
+  repo,
+  enrichment,
+}: {
+  repo: GithubRepo;
+  enrichment: GithubProjectEnrichment | null;
+}) {
   const langColor = repo.language ? LANGUAGE_COLORS[repo.language] ?? "#94a3b8" : null;
+
+  // Use enrichment data if available, fall back to GitHub data
+  const displayTitle = enrichment?.title_override ?? repo.name.replace(/_/g, " ");
+  const displayDescription =
+    enrichment?.description ?? repo.description ?? "No description provided.";
+  const displayTechs = enrichment?.technologies?.length
+    ? enrichment.technologies
+    : repo.topics;
+  const liveUrl = enrichment?.live_url ?? repo.homepage;
+
   return (
     <GlassCard className="group flex h-full flex-col p-6">
       <div className="flex items-start justify-between gap-3">
@@ -97,24 +121,33 @@ function RepoCard({ repo }: { repo: GithubRepo }) {
       </div>
 
       <h3 className="mt-4 font-display text-lg font-semibold tracking-tight">
-        {repo.name.replace(/_/g, " ")}
+        {displayTitle}
       </h3>
 
       <p className="mt-2 line-clamp-3 text-sm text-[var(--color-text-muted)]">
-        {repo.description ?? "No description provided."}
+        {displayDescription}
       </p>
+
+      {/* Highlights from enrichment */}
+      {enrichment?.highlights && enrichment.highlights.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {enrichment.highlights.slice(0, 3).map((h) => (
+            <li key={h} className="flex items-start gap-1.5 text-xs text-[var(--color-text-muted)]">
+              <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#6366f1]" />
+              {h}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {repo.language && langColor && (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium">
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: langColor }}
-            />
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: langColor }} />
             {repo.language}
           </span>
         )}
-        {repo.topics.slice(0, 3).map((t) => (
+        {displayTechs.slice(0, 3).map((t) => (
           <span
             key={t}
             className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-[var(--color-text-muted)]"
@@ -127,6 +160,18 @@ function RepoCard({ repo }: { repo: GithubRepo }) {
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/5 pt-4 text-xs text-[var(--color-text-muted)]">
         <span>Updated {timeAgo(repo.pushed_at)}</span>
         <div className="flex items-center gap-3">
+          {liveUrl && (
+            <a
+              href={liveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 transition-colors hover:text-white"
+              aria-label={`${displayTitle} live demo`}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Demo
+            </a>
+          )}
           <ReadmeModal owner={repo.owner.login} repo={repo.name} />
           <TrackableLink
             href={repo.html_url}

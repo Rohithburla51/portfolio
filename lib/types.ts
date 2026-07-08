@@ -119,3 +119,17 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
 }
+
+export interface GithubProjectEnrichment {
+  id: string;
+  repo_name: string;
+  title_override: string | null;
+  description: string | null;
+  highlights: string[] | null;
+  technologies: string[] | null;
+  live_url: string | null;
+  is_hidden: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}

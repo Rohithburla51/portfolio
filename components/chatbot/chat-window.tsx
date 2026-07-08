@@ -203,7 +203,7 @@ export function ChatWindow({ isOpen, onMinimize, settings }: ChatWindowProps) {
     setIsTyping(true);
 
     try {
-      const response = await generateResponse(text);
+      const response = await generateResponse(text, messages);
       const botMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
